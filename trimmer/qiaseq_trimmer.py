@@ -301,6 +301,8 @@ class QiaSeqTrimmer(Trimmer):
                 self._r1_info = (r1_id,r1_seq,r1_qual)
                 self._r2_info = (r2_id,r2_seq,r2_qual)
                 return
+            
+            return
         
         # set annotation for primer tag
         temp = primer_datastruct[0][primer][0]
