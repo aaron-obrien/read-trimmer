@@ -856,14 +856,16 @@ def main(args):
     p.close()
     p.join()
 
-
+    thousand_comma = lambda x: "{:,}".format(x) if args.thousand_comma else str(x) 
+    
     out_metrics = [
-        "{num_r1_pr_trimmed}\tNum Primer side reads with primer identified",
-        "{num_syn_trimmed}\tNum Primer side reads with 3' synthetic oligo trimmed",
-        "{num_r2_pr_trimmed}\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
-        "{num_overlap}\tNum read fragments overlapping",
-        "{num_qual_trim_r1}\tNum Primer side reads qual trimmed",
-        "{num_qual_trim_r2}\tNum UMI side reads qual trimmed",        
+        thousand_comma(total_reads) + "\tTotal read fragments",
+        thousand_comma(num_r1_primer_trimmed) + "\tNum Primer side reads with primer identified",
+        thousand_comma(num_r1_syn_trimmed) + "\tNum Primer side reads with 3' synthetic oligo trimmed",
+        thousand_comma(num_r2_primer_trimmed) + "\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
+        thousand_comma(num_r1_r2_overlap) + "\tNum read fragments overlapping",
+        thousand_comma(num_qual_trim_r1) + "\tNum Primer side reads qual trimmed",
+        thousand_comma(num_qual_trim_r2) + "\tNum UMI side reads qual trimmed",        
         "{qual_trim_r1}\tAvg num Primer side bases qual trimmed",
         "{qual_trim_r2}\tAvg num UMI side bases qual trimmed",
     ]
@@ -875,12 +877,10 @@ def main(args):
     
     if args.is_duplex:
         out_metrics.extend(
-            ["{num_CC}\tNum CC reads".format(num_CC = num_CC),
-             "{num_TT}\tNum TT reads".format(num_TT = num_TT),
-             "{num_NN}\tNum NN reads".format(num_NN = num_NN)])
-        out_metrics_dropped.extend([
-            "{num_no_duplex}\tNum read fragments dropped (no duplex adapter)".format(
-                num_no_duplex = num_no_duplex)])
+            [thousand_comma(num_CC) + "\tNum CC reads",
+             thousand_comma(num_TT) + "\tNum TT reads",
+             thousand_comma(num_NN) + "\tNum NN reads"])
+        out_metrics_dropped.append(thousand_comma(num_no_duplex) + "\tNum read fragments dropped (no duplex adapter)")
         total_dropped += num_no_duplex
         
     if args.seqtype == "rna":
@@ -889,34 +889,26 @@ def main(args):
                 ["{p1_trim}\tAvg num bases {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side,
                                                                             p1_trim = 0 if num_poly_trim_bases_primer == 0 else \
                                                                             round(float(num_poly_trim_bases_primer)/num_poly_trim_primer,2)),
-                 "{p1_trim}\tNum reads {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side, p1_trim = num_poly_trim_primer)])
+                 thousand_comma(num_poly_trim_primer) + "\tNum reads {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side)])
         if args.poly_tail_umi_side != "none":
             out_metrics.extend(
                 ["{p2_trim}\tAvg num bases {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side,
                                                                          p2_trim = 0 if num_poly_trim_bases_umi == 0 else \
                                                                          round(float(num_poly_trim_bases_umi)/num_poly_trim_umi,2)),
-                 "{p2_trim}\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side,p2_trim = num_poly_trim_umi)])
+                 thousand_comma(num_poly_trim_umi) + "\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side)])
 
 
-        out_metrics_dropped.extend([
-            "{bad_umi}\tNum read fragments dropped bad UMI".format(bad_umi = num_bad_umi)]
-        )
+        out_metrics_dropped.append(thousand_comma(num_bad_umi) + "\tNum read fragments dropped bad UMI")
+
         total_dropped += num_bad_umi       
-    out_metrics.extend([
-        "{tot_reads}\tTotal read fragments".format(tot_reads = total_reads),
-        "{num_after_trim}\tNum read fragments after trimming".format(num_after_trim = num_after_trim)])
 
     out_metrics.extend(out_metrics_dropped)                                                                          
-    out_metrics_lines = "\n".join(out_metrics).format(num_r1_pr_trimmed = num_r1_primer_trimmed,
-                                                      num_r2_pr_trimmed = num_r2_primer_trimmed,
-                                                      num_syn_trimmed = num_r1_syn_trimmed,
-                                                      num_overlap = num_r1_r2_overlap,
-                                                      qual_trim_r1 = 0 if num_qual_trim_r1_bases == 0 else \
+    out_metrics.append(thousand_comma(num_after_trim) + "\tNum read fragments after trimming")
+    
+    out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if num_qual_trim_r1_bases == 0 else \
                                                       round(float(num_qual_trim_r1_bases)/(num_qual_trim_r1),2),
                                                       qual_trim_r2 = 0 if num_qual_trim_r2_bases == 0 else \
-                                                      round(float(num_qual_trim_r2_bases)/(num_qual_trim_r2),2),
-                                                      num_qual_trim_r1 = num_qual_trim_r1,
-                                                      num_qual_trim_r2 = num_qual_trim_r2)
+                                                      round(float(num_qual_trim_r2_bases)/(num_qual_trim_r2),2))
     
     f_out_metrics = open(args.out_metrics,"w")                                                      
     f_out_metrics.write(out_metrics_lines)

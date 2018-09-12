@@ -115,6 +115,7 @@ def init_parser():
     parser.add_argument("--umi_filter_max_Ns", default = 1, type = int, help = "Tolerate these many Ns in the UMI sequence."\
                         "Reads having more than this number are dropped. Only applicable to speRNA. Default : %(default)s")
     
+    parser.add_argument("--thousand_comma", action = "store_true", help = "Show integers with thousand's comma. Default : %(default)s")
 
 def main(args):
     '''
