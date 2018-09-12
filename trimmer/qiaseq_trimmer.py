@@ -870,8 +870,8 @@ def main(args):
         "{qual_trim_r2}\tAvg num UMI side bases qual trimmed",
     ]
     out_metrics_dropped = [
-        "{too_short}\tNum read fragments dropped too short".format(too_short = num_too_short),
-        "{odd}\tNum read fragments dropped odd structure (usually Primer side has only primer sequence)".format(odd = num_odd)
+        thousand_comma(num_too_short) + "\tNum read fragments dropped too short",
+        thousand_comma(num_odd) + "\tNum read fragments dropped odd structure (usually Primer side has only primer sequence)"
     ]
     total_dropped = num_too_short + num_odd
     
@@ -904,6 +904,7 @@ def main(args):
 
     out_metrics.extend(out_metrics_dropped)                                                                          
     out_metrics.append(thousand_comma(num_after_trim) + "\tNum read fragments after trimming")
+    out_metrics.append("{pct_after_trim} \tPct read fragments after trimming".format(pct_after_trim = round(100*num_after_trim/total_reads, 2) if total_reads else 0.00))
     
     out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if num_qual_trim_r1_bases == 0 else \
                                                       round(float(num_qual_trim_r1_bases)/(num_qual_trim_r1),2),
