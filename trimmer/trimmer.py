@@ -282,7 +282,7 @@ class Trimmer(object):
         if len(query) == 0:
             return (-1,-1)
         alignment = edlib.align(query,r1_seq,mode="HW",task="locations")
-        if float(alignment["editDistance"])/self.overlap_check_len <= 0.12:
+        if float(alignment["editDistance"])/self.overlap_check_len <= self.max_mismatch_rate_overlap:
             return alignment["locations"][-1]
         else:
             return (-1,-1)
@@ -293,8 +293,8 @@ class Trimmer(object):
         query = self.revcomp(r1_seq[primer_end+1:primer_end+1+self.overlap_check_len])
         if len(query) == 0:
             return (-1,-1)
-        alignment = edlib.align(query,r2_seq,mode="HW",task="locations")        
-        if float(alignment["editDistance"])/self.overlap_check_len <= 0.12:
+        alignment = edlib.align(query,r2_seq,mode="HW",task="locations")
+        if float(alignment["editDistance"])/self.overlap_check_len <= self.max_mismatch_rate_overlap:
             return alignment["locations"][-1]
         else:
             return (-1,-1)        
