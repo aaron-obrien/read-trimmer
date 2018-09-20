@@ -59,12 +59,11 @@ def quality_trim(str qualities, str bases, int cutoff_back, bint is_nextseq, int
     max_qual = 0
     s = 0
     for i in reversed(xrange(len(qualities))):
-        q = ord(qualities[i]) - base
         if is_nextseq and bases[i] == "G":
             q = cutoff_back - 1
         else:
             q = ord(qualities[i]) - base
-        s += cutoff_back - (ord(qualities[i]) - base)
+        s += cutoff_back - q
 
         if s < 0:
             break
