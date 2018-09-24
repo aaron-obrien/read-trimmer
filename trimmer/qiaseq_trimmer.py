@@ -330,7 +330,7 @@ class QiaSeqTrimmer(Trimmer):
             if primer_side_overlap_start != -1:
                 primer_side_overlap = True
 
-        num_primer_bases_R2 = len(primer) if self.primer3_R2 == -1 else self.primer3_R2 # keep all bases if primer3_R2 is -1
+        num_primer_bases_R2 = r1_primer_end_pos + 1 if self.primer3_R2 == -1 else self.primer3_R2 # keep all primer bases if primer3_R2 is -1
         if syn_side_overlap:
             r1_trim_end = syn_side_overlap_end + 1
             if self.check_primer_side and primer_side_overlap : # use primer side coordinates for trimming
@@ -351,11 +351,10 @@ class QiaSeqTrimmer(Trimmer):
                 
         # update r1,r2 qual and sequence
         if self.primer3_R1 == -1: # no primer bases to trim
-            r1_trim_start = r1_primer_end_pos - len(primer) + 1 # only trim extra bases upstream of the primer's 5'
-            if r1_trim_start < 0: # if the primer is lacking some bases of its 5', then this can be < 0
-                r1_trim_start = 0 # keep all bases in these cases
+            r1_trim_start = 0
         else:
-            r1_trim_start = r1_primer_end_pos - self.primer3_R1 + 1
+            r1_trim_start = r1_primer_end_pos + 1 - self.primer3_R1
+            
         r2_trim_start = self.synthetic_oligo_len
 
         if r1_trim_start >= r1_trim_end: # weird reads , mostly only primer on R1 , no endo seq
