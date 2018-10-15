@@ -34,7 +34,7 @@ class QiaSeqTrimmer(Trimmer):
         self.is_duplex = kwargs["is_duplex"]
         if self.is_nextseq:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT",b"GTTCTGAGCGAYYATAGGAGTCCT",
-                                     b"GTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
+                                     b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
         else:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT"]
 
