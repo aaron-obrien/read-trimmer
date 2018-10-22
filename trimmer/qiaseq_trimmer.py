@@ -771,12 +771,12 @@ def main(args):
         if to_trim_custom_adapter:
             logger.info("Custom sequencing adapter present in > 95% reads")
         args.to_trim_custom_adapter = to_trim_custom_adapter
+        close_fh(f,f2)
     else: # force trimming of custom sequencing adapter , useful for ion reads
         args.to_trim_custom_adapter = args.trim_custom_seq_adapter
         
     logger.info("\nRunning program with args : {}\n".format(args))
-    close_fh(f,f2)
-    
+
     num_r1_primer_trimmed = 0
     num_r1_syn_trimmed    = 0
     num_r2_primer_trimmed = 0
