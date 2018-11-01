@@ -163,10 +163,10 @@ class QiaSeqTrimmer(Trimmer):
             primer_error_info = b":".join([self.tagname_primer_error,b"Z",primer_error])
         
         if self._duplex_tag is None:
-            return self.tag_seperator.join([read_id[0:idx],umi_info,primer_info,primer_error_info])
+            return self.tag_separator.join([read_id[0:idx],umi_info,primer_info,primer_error_info])
         else:
             duplex_info = b":".join([self.tagname_duplex,b"Z",self._duplex_tag])
-            return self.tag_seperator.join([read_id[0:idx],umi_info,primer_info,primer_error_info,duplex_info])
+            return self.tag_separator.join([read_id[0:idx],umi_info,primer_info,primer_error_info,duplex_info])
 
     def _umi_filter_rna(self,umi,umi_qual):
         ''' filter umi based on sequence and base qualities        
@@ -451,7 +451,8 @@ def trim_custom_sequencing_adapter(args,buffers):
         tagname_umi               = args.tagname_umi,
         tagname_primer            = args.tagname_primer,
         tagname_primer_error      = args.tagname_primer_error,
-        tag_seperator             = args.tag_seperator,
+        tag_separator             = args.tag_separator,
+        field_separator           = args.field_separator,
         no_tagnames               = args.no_tagnames
     )
     
@@ -510,7 +511,8 @@ def wrapper_func(args,buffer_):
         tagname_umi               = args.tagname_umi,
         tagname_primer            = args.tagname_primer,
         tagname_primer_error      = args.tagname_primer_error,
-        tag_seperator             = args.tag_seperator,
+        tag_separator             = args.tag_separator,
+        field_separator           = args.field_separator,        
         no_tagnames               = args.no_tagnames
     )
     
@@ -615,8 +617,8 @@ def wrapper_func(args,buffer_):
                 trimmed_r1_info = trim_obj.r1_info
                 trimmed_r2_info = trim_obj.r2_info
             
-            trimmed_r1_lines = b"\n".join([trimmed_r1_info[0],trimmed_r1_info[1],b"+",trimmed_r1_info[2]])
-            trimmed_r2_lines = b"\n".join([trimmed_r2_info[0],trimmed_r2_info[1],b"+",trimmed_r2_info[2]])
+            trimmed_r1_lines = trim_obj.field_separator.join([trimmed_r1_info[0],trimmed_r1_info[1],b"+",trimmed_r1_info[2]])
+            trimmed_r2_lines = trim_obj.field_separator.join([trimmed_r2_info[0],trimmed_r2_info[1],b"+",trimmed_r2_info[2]])
 
             if trim_obj.is_r1_primer_trimmed:
                 num_r1_primer_trimmed+=1
@@ -746,7 +748,8 @@ def main(args):
     args.tagname_primer_error = args.tagname_primer_error.encode("ascii")    
     args.tagname_umi          = args.tagname_umi.encode("ascii")
     args.tagname_duplex       = args.tagname_duplex.encode("ascii")
-    args.tag_seperator        = args.tag_seperator.encode("ascii")
+    args.tag_separator        = args.tag_separator.encode("ascii")
+    args.field_separator      = args.field_separator.encode("ascii")
     args.custom_seq_adapter   = args.custom_seq_adapter.encode("ascii")
 
     global primer_datastruct

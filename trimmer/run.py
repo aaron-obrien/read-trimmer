@@ -62,9 +62,12 @@ def init_parser():
     parser.add_argument("--tagname_duplex", default = "DU",
                         help = "Tag name for duplex tag. Default : %(default)s")
     
-    parser.add_argument("--tag_seperator",default = "\t",
-                        help = "seperator for readID,umi and primer tags. Default : %(default)s")
+    parser.add_argument("--tag_separator",default = "\t",
+                        help = "separator for readID, umi, and primer tags. Default : %(default)s")
     
+    parser.add_argument("--field_separator",default = "\n",
+                        help = "separator for readID, fastq sequence, and fastq base quality. Default : %(default)s")
+
     parser.add_argument("--no_tagnames", action = "store_true",
                         help = "Choose this option to have no tagnames.")
     

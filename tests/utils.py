@@ -33,7 +33,8 @@ def helper_return_qiaseq_obj(args):
                          tagname_duplex            =   args.tagname_duplex,
                          tagname_primer            =   args.tagname_primer,
                          tagname_primer_error      =   args.tagname_primer_error,
-                         tag_seperator             =   args.tag_seperator,
+                         tag_separator             =   args.tag_separator,
+                         field_separator           =   args.field_separator,
                          no_tagnames               =   args.no_tagnames)
 
 
@@ -64,6 +65,7 @@ def helper_return_args():
                      tagname_duplex            =   b"DU",
                      tagname_primer            =   b"pr",
                      tagname_primer_error      =   b"pe",
-                     tag_seperator             =   b"\t",
+                     tag_separator             =   b"\t",
+                     field_separator           =   b"\n",
                      no_tagnames               =   False)
         
