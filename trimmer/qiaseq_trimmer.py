@@ -37,8 +37,16 @@ class QiaSeqTrimmer(Trimmer):
                                      b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
         else:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT"]
+            
+        # some multimodal specific params
+        self.tagname_multimodal = kwargs["tagname_multimodal"]
+        self.is_multimodal = kwargs["is_multimodal"]
+        self._multimodal_UMIend_adapters = [(b"ATTGGAGTCCT", "dna", b"B"), (b"ACGTTTTTTTTTTTTTTTTTTVN", "rna", b"RT"), (b"ATCTGCGGG", "rna", b"TSO")]
+        if self.umi_len_alt is None:
+            self.umi_len_alt = self.umi_len
 
-        self.synthetic_oligo_len = self.umi_len + self.common_seq_len if not self.is_duplex else None
+        # some duplex or multimodal specific params
+        self.synthetic_oligo_len = None if self.is_duplex or self.is_multimodal else self.umi_len + self.common_seq_len
 
     # boolean variables requested from this class
     @property
@@ -111,8 +119,8 @@ class QiaSeqTrimmer(Trimmer):
         :rtype tuple
         :returns (adapter_len -1,duplex_tag)
         '''
-        best_editdist = None
-        start_pos = 13 if r2_seq[0] == b"N" else 12
+        best_editdist = None        
+        start_pos = self.umi_len + 1 if r2_seq[0] == b"N" else self.umi_len
         for a in self._duplex_adapters:
             subseq_r2 = r2_seq[start_pos:start_pos+len(a)+3]            
             align = edlib.align(a,subseq_r2,mode="SHW",
@@ -126,13 +134,12 @@ class QiaSeqTrimmer(Trimmer):
                 best_adapter   = a
                 best_subseq    = subseq_r2
                 break
-            else:
-                if best_editdist == None or score < best_score:
-                    best_alignment = align
-                    best_editdist  = editdist
-                    best_score     = score
-                    best_adapter   = a
-                    best_subseq    = subseq_r2
+            elif best_editdist == None or score < best_score:
+                best_alignment = align
+                best_editdist  = editdist
+                best_score     = score
+                best_adapter   = a
+                best_subseq    = subseq_r2
         if best_score <= 0.18:
             end_pos = best_alignment["locations"][-1][1] # multiple alignments with same scores can be there , return end pos of last alignment(furthest end pos)
             duplex_tag = b"CC" if best_subseq[end_pos - 13:end_pos - 9].find(b"CC") != -1 \
@@ -142,6 +149,52 @@ class QiaSeqTrimmer(Trimmer):
         else:
             return (-1,"-1")
         
+    # multimodal specific vars
+    @property
+    def is_multimodal_adapter_present(self):
+        return self._is_multimodal_adapter_present
+    @property
+    def multimodal_adapter_name(slef):
+        return self._multimodal_adapter_name
+        
+    def _id_multimodal_adapter_name(self,r2_seq):
+        ''' Identify multimodal adapter sequence on UMI end
+        :param bytes r2_seq: R2 sequence
+
+        :rtype tuple
+        :returns (adapter_len -1,multimodal_adapter_name,umi_len)
+        '''
+        best_editdist = None
+        for a, b, c in self._multimodal_UMIend_adapters:            
+            umi_len = self.umi_len if b == self.seqtype else self.umi_len_alt
+            start_pos = umi_len + 1 if r2_seq[0] == b"N" else umi_len
+            subseq_r2 = r2_seq[start_pos:start_pos+len(a)+3]            
+            align = edlib.align(a,subseq_r2,mode="SHW",additionalEqualities=[("V", "A"), ("V", "C"), ("V", "G")]) # prefix mode
+            editdist = align["editDistance"]
+            score    = float(editdist)/len(a)
+            if editdist == 0:
+                best_alignment = align
+                best_editdist  = editdist
+                best_score     = score
+                best_adapter   = a
+                best_subseq    = subseq_r2
+                best_umi_len   = umi_len
+                best_adpt_name = c
+                break
+            elif best_editdist == None or score < best_score:
+                best_alignment = align
+                best_editdist  = editdist
+                best_score     = score
+                best_adapter   = a
+                best_subseq    = subseq_r2
+                best_umi_len   = umi_len
+                best_adpt_name = c
+        if best_score <= 0.2:
+            end_pos = best_alignment["locations"][-1][1] # multiple alignments with same scores can be there , return end pos of last alignment(furthest end pos)                        
+            return (end_pos,best_adpt_name,best_umi_len)
+        else:
+            return (-1,"-1",self.umi_len)
+
     def _reformat_readid(self,read_id,umi,primer_id,primer_error):
         ''' update read id with umi and primer info
         :param read_id: bytes
@@ -162,11 +215,25 @@ class QiaSeqTrimmer(Trimmer):
             primer_info = b":".join([self.tagname_primer,b"Z",primer_id])
             primer_error_info = b":".join([self.tagname_primer_error,b"Z",primer_error])
         
-        if self._duplex_tag is None:
-            return self.tag_separator.join([read_id[0:idx],umi_info,primer_info,primer_error_info])
-        else:
-            duplex_info = b":".join([self.tagname_duplex,b"Z",self._duplex_tag])
-            return self.tag_separator.join([read_id[0:idx],umi_info,primer_info,primer_error_info,duplex_info])
+        read_id_info = [read_id[0:idx],umi_info,primer_info,primer_error_info]
+        
+        if self.is_duplex:
+            if self.is_multimodal:
+                raise Exception("Cannot handle with duplex tags from multimodal reads!")
+            elif self.no_tagnames:
+                duplex_info = self.duplex_tag
+            else:
+                duplex_info = b":".join([self.tagname_duplex,b"Z",self.duplex_tag])
+            read_id_info.append(duplex_info)
+        
+        if self.is_multimodal:
+            if self.no_tagnames:
+                multimodal_adaper_info = self.multimodal_adapter_name
+            else:
+                multimodal_adaper_info = b":".join([self.tagname_multimodal,b"Z",self.multimodal_adapter_name])
+            read_id_info.append(multimodal_adaper_info)
+        
+        return self.tag_separator.join(read_id_info)
 
     def _umi_filter_rna(self,umi,umi_qual):
         ''' filter umi based on sequence and base qualities        
@@ -188,28 +255,30 @@ class QiaSeqTrimmer(Trimmer):
         """ Trim QiaSeq DNA/RNA reads
         """
         # init some bools
-        self._is_r1_primer_trimmed       = False
-        self._is_r1_syn_trimmed          = False
-        self._is_r2_primer_trimmed       = False
-        self._is_r1_r2_overlap           = False
-        self._is_too_short               = False
-        self._is_odd_structure           = False
-        self._is_bad_umi                 = False # only used for RNA
+        self._is_r1_primer_trimmed      = False
+        self._is_r1_syn_trimmed         = False
+        self._is_r2_primer_trimmed      = False
+        self._is_r1_r2_overlap          = False
+        self._is_too_short              = False
+        self._is_odd_structure          = False
+        self._is_bad_umi                = False # only used for RNA
 
-        self._is_r1_qual_trim            = False
-        self._is_r2_qual_trim            = False
+        self._is_r1_qual_trim           = False
+        self._is_r2_qual_trim           = False
         
-        self._is_r1_poly_tail_trim       = False # only used for RNA
-        self._is_r2_poly_tail_trim       = False # only used for RNA
+        self._is_r1_poly_tail_trim      = False # only used for RNA
+        self._is_r2_poly_tail_trim      = False # only used for RNA
         
-        self._is_duplex_adapter_present  = False
-        self._duplex_tag                 = None
+        self._is_duplex_adapter_present = False
+        self._duplex_tag                = None
+        self._multimodal_adapter_name   = None
         
         # init local variables
         primer_side_overlap = False
         syn_side_overlap    = False
         primer_id = "-1"
         primer_error = "-1"
+        umi_len = self.umi_len # for multimodal reads, UMI length depends on sequence type (in case of leakage)
         
         # unpack R1,R2 info
         r1_id,r1_seq,r1_qual = self._r1_info
@@ -230,16 +299,25 @@ class QiaSeqTrimmer(Trimmer):
                 return            
             # update synthetic oligo len
             self._is_duplex_adapter_present = True
-            self.synthetic_oligo_len = self.umi_len + (adapter_end_pos + 1)
+            self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
+            
+        # identify multimodal UMI end adapter, if needed
+        if self.is_multimodal:
+            adapter_end_pos,self._multimodal_adapter_name,umi_len = self._id_multimodal_adapter_name(r2_seq)
+            if adapter_end_pos == -1: # drop read                
+                return            
+            # update synthetic oligo len
+            self._is_multimodal_adapter_present = True
+            self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
             
         # get umi
         synthetic_oligo_len = self.synthetic_oligo_len        
         if not r2_seq.startswith(b"N"):
-            umi = r2_seq[0:self.umi_len]
-            umi_qual = r2_qual[0:self.umi_len]
+            umi = r2_seq[0:umi_len]
+            umi_qual = r2_qual[0:umi_len]
         else:
-            umi = r2_seq[1:self.umi_len+1]
-            umi_qual = r2_qual[1:self.umi_len+1]
+            umi = r2_seq[1:umi_len+1]
+            umi_qual = r2_qual[1:umi_len+1]
             self.synthetic_oligo_len += 1
             
         if self.seqtype == "rna":
@@ -429,11 +507,13 @@ def trim_custom_sequencing_adapter(args,buffers):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
         max_mismatch_rate_overlap = args.max_mismatch_rate_overlap,
         custom_seq_adapter        = args.custom_seq_adapter,
         umi_len                   = args.umi_len,
+        umi_len_alt               = args.umi_len_alt,
         common_seq_len            = args.common_seq_len,
         overlap_check_len         = args.overlap_check_len,
         min_primer_side_len       = args.min_primer_side_len,
@@ -448,6 +528,7 @@ def trim_custom_sequencing_adapter(args,buffers):
         poly_tail_primer_side     = args.poly_tail_primer_side,
         poly_tail_umi_side        = args.poly_tail_umi_side,
         tagname_duplex            = args.tagname_duplex,
+        tagname_multimodal        = args.tagname_multimodal,
         tagname_umi               = args.tagname_umi,
         tagname_primer            = args.tagname_primer,
         tagname_primer_error      = args.tagname_primer_error,
@@ -489,11 +570,13 @@ def wrapper_func(args,buffer_):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
         max_mismatch_rate_overlap = args.max_mismatch_rate_overlap,
         custom_seq_adapter        = args.custom_seq_adapter,
         umi_len                   = args.umi_len,
+        umi_len_alt               = args.umi_len_alt,
         common_seq_len            = args.common_seq_len,
         overlap_check_len         = args.overlap_check_len,
         min_primer_side_len       = args.min_primer_side_len,
@@ -508,6 +591,7 @@ def wrapper_func(args,buffer_):
         poly_tail_primer_side     = args.poly_tail_primer_side,
         poly_tail_umi_side        = args.poly_tail_umi_side,
         tagname_duplex            = args.tagname_duplex,
+        tagname_multimodal        = args.tagname_multimodal
         tagname_umi               = args.tagname_umi,
         tagname_primer            = args.tagname_primer,
         tagname_primer_error      = args.tagname_primer_error,
@@ -528,6 +612,7 @@ def wrapper_func(args,buffer_):
     num_odd               = 0
     num_bad_umi           = 0
     num_no_duplex         = 0
+    num_no_UMIend_adapter = 0
     num_reads             = 0
     num_r1_primer_trimmed = 0
     num_r1_syn_trimmed    = 0
@@ -537,6 +622,10 @@ def wrapper_func(args,buffer_):
     num_CC = 0
     num_TT = 0
     num_NN = 0
+    # multimodal specific
+    num_UMIend_B   = 0
+    num_UMIend_RT  = 0
+    num_UMIend_TSO = 0
     # quality trimming
     num_qual_trim_bases_r1 = 0
     num_qual_trim_bases_r2 = 0
@@ -563,7 +652,7 @@ def wrapper_func(args,buffer_):
         elif i % 4 == 3: # placeholder
             pass
         elif i % 4 == 0: # qual
-            num_reads+=1
+            num_reads += 1
 
             r1_qual,r2_qual = line
             # have R1 and R2 ready to process now
@@ -584,24 +673,29 @@ def wrapper_func(args,buffer_):
                 num_poly_trim_umi += 1
                 
             if trim_obj.is_too_short:
-                num_too_short+=1
-                i+=1
+                num_too_short += 1
+                i += 1
                 continue
             elif trim_obj.is_odd_structure:
-                num_odd+=1
-                i+=1
+                num_odd += 1
+                i += 1
                 continue
             elif trim_obj.is_bad_umi:
                 assert args.seqtype == "rna","UMI filter only applicable for speRNA reads!"
                 num_bad_umi+=1
-                i+=1
+                i += 1
                 continue
             
             if args.is_duplex and not trim_obj.is_duplex_adapter_present:
-                num_no_duplex+=1
-                i+=1
+                num_no_duplex += 1
+                i += 1
                 continue
             
+            if args.is_multimodal and not trim_obj.is_multimodal_adapter_present:
+                num_no_UMIend_adapter += 1
+                i += 1
+                continue
+
             if trim_obj.is_r1_qual_trim:
                 num_qual_trim_bases_r1 += trim_obj.r1_qual_trim_len
                 num_qual_trim_r1 += 1
@@ -621,13 +715,13 @@ def wrapper_func(args,buffer_):
             trimmed_r2_lines = trim_obj.field_separator.join([trimmed_r2_info[0],trimmed_r2_info[1],b"+",trimmed_r2_info[2]])
 
             if trim_obj.is_r1_primer_trimmed:
-                num_r1_primer_trimmed+=1
+                num_r1_primer_trimmed += 1
             if trim_obj.is_r1_syn_trimmed:
-                num_r1_syn_trimmed+=1                
+                num_r1_syn_trimmed += 1                
             if trim_obj.is_r2_primer_trimmed:
-                num_r2_primer_trimmed+=1
+                num_r2_primer_trimmed += 1
             if trim_obj.is_r1_r2_overlap:
-                num_r1_r2_overlap+=1
+                num_r1_r2_overlap += 1
                 
             if args.is_duplex:
                 duplex_tag = trim_obj.duplex_tag
@@ -639,14 +733,25 @@ def wrapper_func(args,buffer_):
                     num_NN += 1
                 else:
                     raise Exception("Invalid duplex tag : {}".format(duplex_tag.decode("ascii")))
-                    
+
+            if args.is_multimodal:
+                multimodal_adapter_name = trim_obj.multimodal_adapter_name
+                if multimodal_adapter_name == b"B":
+                    num_UMIend_B += 1
+                elif multimodal_adapter_name == b"RT":
+                    num_UMIend_RT += 1
+                elif multimodal_adapter_name == b"TSO":
+                    num_UMIend_TSO += 1
+                else:
+                    raise Exception("Invalid UMI side common sequence (multimodal) : {}".format(multimodal_adapter_name.decode("ascii")))
+
             out_lines_r1_bucket.append(trimmed_r1_lines)
             out_lines_r2_bucket.append(trimmed_r2_lines)
             num_reads_after_trim += 1
             
-        i+=1
+        i += 1
         
-    metrics = (num_r1_primer_trimmed,num_r1_syn_trimmed,num_r2_primer_trimmed,num_r1_r2_overlap,num_too_short,num_odd,num_bad_umi,num_reads,num_qual_trim_bases_r1,num_qual_trim_bases_r2,num_qual_trim_r1,num_qual_trim_r2,num_poly_trim_bases_primer,num_poly_trim_primer,num_poly_trim_bases_umi,num_poly_trim_umi,num_CC,num_TT,num_NN,num_no_duplex,num_reads_after_trim)
+    metrics = (num_r1_primer_trimmed,num_r1_syn_trimmed,num_r2_primer_trimmed,num_r1_r2_overlap,num_too_short,num_odd,num_bad_umi,num_reads,num_qual_trim_bases_r1,num_qual_trim_bases_r2,num_qual_trim_r1,num_qual_trim_r2,num_poly_trim_bases_primer,num_poly_trim_primer,num_poly_trim_bases_umi,num_poly_trim_umi,num_CC,num_TT,num_NN,num_no_duplex,num_UMIend_B,num_UMIend_RT,num_UMIend_TSO,num_no_UMIend_adapter,num_reads_after_trim)
     out_lines_R1 = b"\n".join(out_lines_r1_bucket)
     out_lines_R2 = b"\n".join(out_lines_r2_bucket)
 
@@ -748,6 +853,7 @@ def main(args):
     args.tagname_primer_error = args.tagname_primer_error.encode("ascii")    
     args.tagname_umi          = args.tagname_umi.encode("ascii")
     args.tagname_duplex       = args.tagname_duplex.encode("ascii")
+    args.tagname_multimodal   = args.tagname_multimodal.encode("ascii")
     args.tag_separator        = args.tag_separator.encode("ascii")
     args.field_separator      = args.field_separator.encode("ascii")
     args.custom_seq_adapter   = args.custom_seq_adapter.encode("ascii")
@@ -788,6 +894,7 @@ def main(args):
     num_odd               = 0
     num_bad_umi           = 0
     num_no_duplex         = 0
+    num_no_UMIend_adapter = 0
     total_reads           = 0
     num_after_trim        = 0
     
@@ -800,11 +907,14 @@ def main(args):
     num_poly_trim_primer        = 0
     num_poly_trim_bases_umi     = 0
     num_poly_trim_umi           = 0 
-
     
     num_CC = 0
     num_TT = 0
-    num_NN = 0
+    num_NN = 0    
+    
+    num_UMIend_TSO = 0
+    num_UMIend_RT  = 0
+    num_UMIend_B   = 0
     
     nchunk = 1
 
@@ -837,15 +947,19 @@ def main(args):
             num_poly_trim_bases_primer += counter_tup[12]
             num_poly_trim_primer       += counter_tup[13]
             num_poly_trim_bases_umi    += counter_tup[14]
-            num_poly_trim_umi          += counter_tup[15]
-            
+            num_poly_trim_umi          += counter_tup[15]            
             
             num_CC         +=  counter_tup[16]
             num_TT         +=  counter_tup[17]
             num_NN         +=  counter_tup[18]
             num_no_duplex  +=  counter_tup[19]
+            
+            num_UMIend_B          += counter_tup[20]
+            num_UMIend_RT         += counter_tup[21]
+            num_UMIend_TSO        += counter_tup[22]
+            num_no_UMIend_adapter += counter_tup[23]
 
-            num_after_trim +=  counter_tup[20]
+            num_after_trim +=  counter_tup[24]
 
             f_out_r1.write(trimmed_r1_lines)
             f_out_r1.write(b"\n")
@@ -884,7 +998,16 @@ def main(args):
              thousand_comma(num_NN) + "\tNum NN reads"])
         out_metrics_dropped.append(thousand_comma(num_no_duplex) + "\tNum read fragments dropped (no duplex adapter)")
         total_dropped += num_no_duplex
-        
+
+    if args.is_multimodal:
+        out_metrics.extend(
+            [thousand_comma(num_UMIend_B)   + "\tNum UMI end reads with common sequence B",
+             thousand_comma(num_UMIend_RT)  + "\tNum UMI end reads with common sequence RT",
+             thousand_comma(num_UMIend_TSO) + "\tNum UMI end reads with common sequence TSO"])
+        num_dropped_leakage = num_UMIend_B if args.seqtype == "rna" else num_UMIend_RT + num_UMIend_TSO
+        out_metrics_dropped.append(thousand_comma(num_dropped_leakage) + "\tNum read fragments dropped (no/wrong common adapter)")
+        total_dropped += num_dropped_leakage
+
     if args.seqtype == "rna":
         if args.poly_tail_primer_side != "none":
             out_metrics.extend(
