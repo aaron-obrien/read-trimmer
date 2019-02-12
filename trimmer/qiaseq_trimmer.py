@@ -154,8 +154,11 @@ class QiaSeqTrimmer(Trimmer):
     def is_multimodal_adapter_present(self):
         return self._is_multimodal_adapter_present
     @property
-    def multimodal_adapter_name(slef):
+    def multimodal_adapter_name(self):
         return self._multimodal_adapter_name
+    @property
+    def is_multimodal_alt_seq(self):
+        return self._is_multimodal_alt_seq
         
     def _id_multimodal_adapter_name(self,r2_seq):
         ''' Identify multimodal adapter sequence on UMI end
@@ -165,8 +168,9 @@ class QiaSeqTrimmer(Trimmer):
         :returns (adapter_len -1,multimodal_adapter_name,umi_len)
         '''
         best_editdist = None
-        for a, b, c in self._multimodal_UMIend_adapters:            
-            umi_len = self.umi_len if b == self.seqtype else self.umi_len_alt
+        for a, b, c in self._multimodal_UMIend_adapters:
+            is_multimodal_alt_seq_ = (b != self.seqtype)
+            umi_len = self.umi_len_alt if is_multimodal_alt_seq_ else self.umi_len
             start_pos = umi_len + 1 if r2_seq[0] == b"N" else umi_len
             subseq_r2 = r2_seq[start_pos:start_pos+len(a)+3]            
             align = edlib.align(a,subseq_r2,mode="SHW",additionalEqualities=[("V", "A"), ("V", "C"), ("V", "G")]) # prefix mode
@@ -180,6 +184,7 @@ class QiaSeqTrimmer(Trimmer):
                 best_subseq    = subseq_r2
                 best_umi_len   = umi_len
                 best_adpt_name = c
+                best_multimodal_alt_seq = is_multimodal_alt_seq_
                 break
             elif best_editdist == None or score < best_score:
                 best_alignment = align
@@ -189,11 +194,12 @@ class QiaSeqTrimmer(Trimmer):
                 best_subseq    = subseq_r2
                 best_umi_len   = umi_len
                 best_adpt_name = c
+                best_multimodal_alt_seq = is_multimodal_alt_seq_
         if best_score <= 0.2:
             end_pos = best_alignment["locations"][-1][1] # multiple alignments with same scores can be there , return end pos of last alignment(furthest end pos)                        
-            return (end_pos,best_adpt_name,best_umi_len)
+            return (end_pos,best_adpt_name,best_umi_len,best_multimodal_alt_seq)
         else:
-            return (-1,"-1",self.umi_len)
+            return (-1,"-1",self.umi_len,False)
 
     def _reformat_readid(self,read_id,umi,primer_id,primer_error):
         ''' update read id with umi and primer info
@@ -269,9 +275,11 @@ class QiaSeqTrimmer(Trimmer):
         self._is_r1_poly_tail_trim      = False # only used for RNA
         self._is_r2_poly_tail_trim      = False # only used for RNA
         
-        self._is_duplex_adapter_present = False
-        self._duplex_tag                = None
-        self._multimodal_adapter_name   = None
+        self._is_duplex_adapter_present     = False
+        self._is_multimodal_adapter_present = False
+        self._is_multimodal_alt_seq         = False
+        self._duplex_tag                    = None
+        self._multimodal_adapter_name       = None
         
         # init local variables
         primer_side_overlap = False
@@ -303,11 +311,11 @@ class QiaSeqTrimmer(Trimmer):
             
         # identify multimodal UMI end adapter, if needed
         if self.is_multimodal:
-            adapter_end_pos,self._multimodal_adapter_name,umi_len = self._id_multimodal_adapter_name(r2_seq)
+            adapter_end_pos,self._multimodal_adapter_name,umi_len,self._is_multimodal_alt_seq = self._id_multimodal_adapter_name(r2_seq)
             if adapter_end_pos == -1: # drop read                
                 return            
             # update synthetic oligo len
-            self._is_multimodal_adapter_present = True
+            self._is_multimodal_adapter_present = True            
             self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
             
         # get umi
@@ -534,7 +542,8 @@ def trim_custom_sequencing_adapter(args,buffers):
         tagname_primer_error      = args.tagname_primer_error,
         tag_separator             = args.tag_separator,
         field_separator           = args.field_separator,
-        no_tagnames               = args.no_tagnames
+        no_tagnames               = args.no_tagnames,
+        drop_alt_seqtype          = args.drop_alt_seqtype
     )
     
     buff_r1,buff_r2 = buffers
@@ -591,13 +600,14 @@ def wrapper_func(args,buffer_):
         poly_tail_primer_side     = args.poly_tail_primer_side,
         poly_tail_umi_side        = args.poly_tail_umi_side,
         tagname_duplex            = args.tagname_duplex,
-        tagname_multimodal        = args.tagname_multimodal
+        tagname_multimodal        = args.tagname_multimodal,
         tagname_umi               = args.tagname_umi,
         tagname_primer            = args.tagname_primer,
         tagname_primer_error      = args.tagname_primer_error,
         tag_separator             = args.tag_separator,
         field_separator           = args.field_separator,        
-        no_tagnames               = args.no_tagnames
+        no_tagnames               = args.no_tagnames,
+        drop_alt_seqtype          = args.drop_alt_seqtype
     )
     
     # unpack input byte string                                 
@@ -613,6 +623,7 @@ def wrapper_func(args,buffer_):
     num_bad_umi           = 0
     num_no_duplex         = 0
     num_no_UMIend_adapter = 0
+    num_UMIend_alt        = 0
     num_reads             = 0
     num_r1_primer_trimmed = 0
     num_r1_syn_trimmed    = 0
@@ -744,6 +755,11 @@ def wrapper_func(args,buffer_):
                     num_UMIend_TSO += 1
                 else:
                     raise Exception("Invalid UMI side common sequence (multimodal) : {}".format(multimodal_adapter_name.decode("ascii")))
+                if trim_obj.is_multimodal_alt_seq:
+                    num_UMIend_alt += 1
+                    if args.drop_alt_seqtype:
+                        i += 1
+                        continue
 
             out_lines_r1_bucket.append(trimmed_r1_lines)
             out_lines_r2_bucket.append(trimmed_r2_lines)
@@ -751,7 +767,7 @@ def wrapper_func(args,buffer_):
             
         i += 1
         
-    metrics = (num_r1_primer_trimmed,num_r1_syn_trimmed,num_r2_primer_trimmed,num_r1_r2_overlap,num_too_short,num_odd,num_bad_umi,num_reads,num_qual_trim_bases_r1,num_qual_trim_bases_r2,num_qual_trim_r1,num_qual_trim_r2,num_poly_trim_bases_primer,num_poly_trim_primer,num_poly_trim_bases_umi,num_poly_trim_umi,num_CC,num_TT,num_NN,num_no_duplex,num_UMIend_B,num_UMIend_RT,num_UMIend_TSO,num_no_UMIend_adapter,num_reads_after_trim)
+    metrics = (num_r1_primer_trimmed,num_r1_syn_trimmed,num_r2_primer_trimmed,num_r1_r2_overlap,num_too_short,num_odd,num_bad_umi,num_reads,num_qual_trim_bases_r1,num_qual_trim_bases_r2,num_qual_trim_r1,num_qual_trim_r2,num_poly_trim_bases_primer,num_poly_trim_primer,num_poly_trim_bases_umi,num_poly_trim_umi,num_CC,num_TT,num_NN,num_no_duplex,num_UMIend_B,num_UMIend_RT,num_UMIend_TSO,num_no_UMIend_adapter,num_UMIend_alt,num_reads_after_trim)
     out_lines_R1 = b"\n".join(out_lines_r1_bucket)
     out_lines_R2 = b"\n".join(out_lines_r2_bucket)
 
@@ -895,6 +911,7 @@ def main(args):
     num_bad_umi           = 0
     num_no_duplex         = 0
     num_no_UMIend_adapter = 0
+    num_UMIend_alt        = 0
     total_reads           = 0
     num_after_trim        = 0
     
@@ -958,8 +975,9 @@ def main(args):
             num_UMIend_RT         += counter_tup[21]
             num_UMIend_TSO        += counter_tup[22]
             num_no_UMIend_adapter += counter_tup[23]
+            num_UMIend_alt        += counter_tup[24]
 
-            num_after_trim +=  counter_tup[24]
+            num_after_trim +=  counter_tup[25]
 
             f_out_r1.write(trimmed_r1_lines)
             f_out_r1.write(b"\n")
@@ -976,18 +994,18 @@ def main(args):
     
     out_metrics = [
         thousand_comma(total_reads) + "\tTotal read fragments",
-        thousand_comma(num_r1_primer_trimmed) + "\tNum Primer side reads with primer identified",
-        thousand_comma(num_r1_syn_trimmed) + "\tNum Primer side reads with 3' synthetic oligo trimmed",
+        thousand_comma(num_r1_primer_trimmed) + "\tNum SPE side reads with primer identified",
+        thousand_comma(num_r1_syn_trimmed) + "\tNum SPE side reads with 3' synthetic oligo trimmed",
         thousand_comma(num_r2_primer_trimmed) + "\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
         thousand_comma(num_r1_r2_overlap) + "\tNum read fragments overlapping",
-        thousand_comma(num_qual_trim_r1) + "\tNum Primer side reads qual trimmed",
+        thousand_comma(num_qual_trim_r1) + "\tNum SPE side reads qual trimmed",
         thousand_comma(num_qual_trim_r2) + "\tNum UMI side reads qual trimmed",        
-        "{qual_trim_r1}\tAvg num Primer side bases qual trimmed",
+        "{qual_trim_r1}\tAvg num SPE side bases qual trimmed",
         "{qual_trim_r2}\tAvg num UMI side bases qual trimmed",
     ]
     out_metrics_dropped = [
         thousand_comma(num_too_short) + "\tNum read fragments dropped too short",
-        thousand_comma(num_odd) + "\tNum read fragments dropped odd structure (usually Primer side has only primer sequence)"
+        thousand_comma(num_odd) + "\tNum read fragments dropped odd structure (usually SPE side has only primer sequence)"
     ]
     total_dropped = num_too_short + num_odd
     
@@ -1001,12 +1019,16 @@ def main(args):
 
     if args.is_multimodal:
         out_metrics.extend(
-            [thousand_comma(num_UMIend_B)   + "\tNum UMI end reads with common sequence B",
-             thousand_comma(num_UMIend_RT)  + "\tNum UMI end reads with common sequence RT",
-             thousand_comma(num_UMIend_TSO) + "\tNum UMI end reads with common sequence TSO"])
-        num_dropped_leakage = num_UMIend_B if args.seqtype == "rna" else num_UMIend_RT + num_UMIend_TSO
-        out_metrics_dropped.append(thousand_comma(num_dropped_leakage) + "\tNum read fragments dropped (no/wrong common adapter)")
-        total_dropped += num_dropped_leakage
+            [thousand_comma(num_UMIend_B)   + "\tNum UMI side reads with common sequence B",
+             thousand_comma(num_UMIend_RT)  + "\tNum UMI side reads with common sequence RT",
+             thousand_comma(num_UMIend_TSO) + "\tNum UMI side reads with common sequence TSO"])
+        if args.drop_alt_seqtype:
+            out_metrics_dropped.append(thousand_comma(num_UMIend_alt) + "\tNum fragments dropped (multimodal alternative sequence type)")
+            total_dropped += num_UMIend_alt
+        else:
+            out_metrics.append(thousand_comma(num_UMIend_alt) + "\tNum fragments from multumodal alternative sequence type")
+        out_metrics_dropped.append(thousand_comma(num_no_UMIend_adapter) + "\tNum fragments dropped (no common sequence)")
+        total_dropped += num_no_UMIend_adapter
 
     if args.seqtype == "rna":
         if args.poly_tail_primer_side != "none":
@@ -1022,9 +1044,7 @@ def main(args):
                                                                          round(float(num_poly_trim_bases_umi)/num_poly_trim_umi,2)),
                  thousand_comma(num_poly_trim_umi) + "\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side)])
 
-
         out_metrics_dropped.append(thousand_comma(num_bad_umi) + "\tNum read fragments dropped bad UMI")
-
         total_dropped += num_bad_umi       
 
     out_metrics.extend(out_metrics_dropped)                                                                          
