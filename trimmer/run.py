@@ -125,6 +125,8 @@ def init_parser():
     parser.add_argument("--tagname_multimodal", default = "MM",
                         help = "Tag name for multimodal common sequence tag. Default : %(default)s")
 
+    parser.add_argument("--drop_alt_seqtype", action = "store_true", help = "Drop reads from alternative sequence type in multimodal mode.")
+
     parser.add_argument("--umi_len_alt", type = int, 
                         help = "Length of alternative UMI sequence, e.g. DNA UMI length for RNA reads and vice versa, only applicable to multimodal reads.")
 
