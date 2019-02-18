@@ -16,6 +16,7 @@ def helper_return_qiaseq_obj(args):
                          max_mismatch_rate_overlap =   args.max_mismatch_rate_overlap,
                          custom_seq_adapter        =   args.custom_seq_adapter,
                          umi_len                   =   args.umi_len,
+                         umi_len_alt               =   args.umi_len_alt,
                          common_seq_len            =   args.common_seq_len,
                          overlap_check_len         =   args.overlap_check_len,
                          min_primer_side_len       =   args.min_primer_side_len,
