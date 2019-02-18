@@ -36,7 +36,7 @@ def helper_return_qiaseq_obj(args):
                          tagname_primer_error      =   args.tagname_primer_error,
                          tag_separator             =   args.tag_separator,
                          field_separator           =   args.field_separator,
-                         no_tagnames               =   args.no_tagnames
+                         no_tagnames               =   args.no_tagnames,
                          drop_alt_seqtype          =   args.drop_alt_seqtype,
                          include_common_seq_tag    =   args.include_common_seq_tag)
 
