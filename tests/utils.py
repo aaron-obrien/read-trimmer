@@ -44,11 +44,13 @@ def helper_return_args():
     '''
     return Namespace(is_nextseq                =   False,
                      is_duplex                 =   False,
+                     is_multimodal             =   False,
                      seqtype                   =   "dna",
                      max_mismatch_rate_primer  =   0.12,
                      max_mismatch_rate_overlap =   0.12,
                      custom_seq_adapter        =   b"AATGTACAGTATTGCGTTTTG",
                      umi_len                   =   12,
+                     umi_len_alt               =   None,
                      common_seq_len            =   11,
                      overlap_check_len         =   25,
                      min_primer_side_len       =   50,
