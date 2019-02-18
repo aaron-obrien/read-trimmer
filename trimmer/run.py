@@ -129,6 +129,8 @@ def init_parser():
 
     parser.add_argument("--umi_len_alt", type = int, 
                         help = "Length of alternative UMI sequence, e.g. DNA UMI length for RNA reads and vice versa, only applicable to multimodal reads.")
+                        
+    parser.add_argument("--include_common_seq_tag", action = "store_true", help = "Include common sequence type, only applicable in multimodal mode.")
 
 def main(args):
     '''

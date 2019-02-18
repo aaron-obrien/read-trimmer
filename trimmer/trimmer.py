@@ -158,6 +158,7 @@ class Trimmer(object):
         self.poly_tail_primer_side     = kwargs["poly_tail_primer_side"]
         self.poly_tail_umi_side        = kwargs["poly_tail_umi_side"]
         self.drop_alt_seqtype          = kwargs["drop_alt_seqtype"]
+        self.include_common_seq_tag    = kwargs["include_common_seq_tag"]
         
         # user can overide these defaults if needed
         self._k = 8  # kmer size

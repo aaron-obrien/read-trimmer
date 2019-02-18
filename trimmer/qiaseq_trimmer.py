@@ -232,7 +232,7 @@ class QiaSeqTrimmer(Trimmer):
                 duplex_info = b":".join([self.tagname_duplex,b"Z",self.duplex_tag])
             read_id_info.append(duplex_info)
         
-        if self.is_multimodal:
+        if self.is_multimodal and self.include_common_seq_tag:
             if self.no_tagnames:
                 multimodal_adaper_info = self.multimodal_adapter_name
             else:
@@ -543,7 +543,8 @@ def trim_custom_sequencing_adapter(args,buffers):
         tag_separator             = args.tag_separator,
         field_separator           = args.field_separator,
         no_tagnames               = args.no_tagnames,
-        drop_alt_seqtype          = args.drop_alt_seqtype
+        drop_alt_seqtype          = args.drop_alt_seqtype,
+        include_common_seq_tag    = args.include_common_seq_tag
     )
     
     buff_r1,buff_r2 = buffers
@@ -607,7 +608,8 @@ def wrapper_func(args,buffer_):
         tag_separator             = args.tag_separator,
         field_separator           = args.field_separator,        
         no_tagnames               = args.no_tagnames,
-        drop_alt_seqtype          = args.drop_alt_seqtype
+        drop_alt_seqtype          = args.drop_alt_seqtype,
+        include_common_seq_tag    = args.include_common_seq_tag
     )
     
     # unpack input byte string                                 
