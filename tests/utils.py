@@ -11,6 +11,7 @@ def helper_return_qiaseq_obj(args):
     '''
     return QiaSeqTrimmer(is_nextseq                =   args.is_nextseq,
                          is_duplex                 =   args.is_duplex,
+                         is_multimodal             =   args.is_multimodal,
                          seqtype                   =   args.seqtype,
                          max_mismatch_rate_primer  =   args.max_mismatch_rate_primer,
                          max_mismatch_rate_overlap =   args.max_mismatch_rate_overlap,
