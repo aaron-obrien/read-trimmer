@@ -11,6 +11,7 @@ def helper_return_qiaseq_obj(args):
     '''
     return QiaSeqTrimmer(is_nextseq                =   args.is_nextseq,
                          is_duplex                 =   args.is_duplex,
+                         is_phased_adapters        =   args.is_phased_adapters,
                          is_multimodal             =   args.is_multimodal,
                          seqtype                   =   args.seqtype,
                          max_mismatch_rate_primer  =   args.max_mismatch_rate_primer,
@@ -48,6 +49,7 @@ def helper_return_args():
     '''
     return Namespace(is_nextseq                =   False,
                      is_duplex                 =   False,
+                     is_phased_adapters        =   False,
                      is_multimodal             =   False,
                      seqtype                   =   "dna",
                      max_mismatch_rate_primer  =   0.12,
