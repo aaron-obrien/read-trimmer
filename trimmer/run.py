@@ -38,6 +38,9 @@ def init_parser():
     parser.add_argument("--is_duplex", action = "store_true",
                          help = "Whether this is a duplex sequencing experiment")
 
+    parser.add_argument("--is_phased_adapters", action = "store_true",
+                         help = "Whether phased adapters were used in the duplex sequencing experiment")
+
     parser.add_argument("--is_r2_primer_side",action = "store_true", help = "Is R2 read the primer side?")    
     
     parser.add_argument("--check_primer_side", action = "store_true",

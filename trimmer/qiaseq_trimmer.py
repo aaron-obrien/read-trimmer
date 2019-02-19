@@ -32,9 +32,10 @@ class QiaSeqTrimmer(Trimmer):
         self.seqtype = kwargs["seqtype"]
         
         # some duplex specific params
-        self.tagname_duplex = kwargs["tagname_duplex"]
-        self.is_duplex = kwargs["is_duplex"]
-        if self.is_nextseq:
+        self.tagname_duplex     = kwargs["tagname_duplex"]
+        self.is_duplex          = kwargs["is_duplex"]
+        self.is_phased_adapters = kwargs["is_phased_adapters"]
+        if self.is_phased_adapters:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT",b"GTTCTGAGCGAYYATAGGAGTCCT",
                                      b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
         else:
@@ -517,6 +518,7 @@ def trim_custom_sequencing_adapter(args,buffers):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_phased_adapters        = args.is_phased_adapters,
         is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
@@ -583,6 +585,7 @@ def wrapper_func(args,queue,buffer_):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_phased_adapters        = args.is_phased_adapters,
         is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
