@@ -11,11 +11,13 @@ def helper_return_qiaseq_obj(args):
     '''
     return QiaSeqTrimmer(is_nextseq                =   args.is_nextseq,
                          is_duplex                 =   args.is_duplex,
+                         is_multimodal             =   args.is_multimodal,
                          seqtype                   =   args.seqtype,
                          max_mismatch_rate_primer  =   args.max_mismatch_rate_primer,
                          max_mismatch_rate_overlap =   args.max_mismatch_rate_overlap,
                          custom_seq_adapter        =   args.custom_seq_adapter,
                          umi_len                   =   args.umi_len,
+                         umi_len_alt               =   args.umi_len_alt,
                          common_seq_len            =   args.common_seq_len,
                          overlap_check_len         =   args.overlap_check_len,
                          min_primer_side_len       =   args.min_primer_side_len,
@@ -33,9 +35,12 @@ def helper_return_qiaseq_obj(args):
                          tagname_duplex            =   args.tagname_duplex,
                          tagname_primer            =   args.tagname_primer,
                          tagname_primer_error      =   args.tagname_primer_error,
+                         tagname_multimodal        =   args.tagname_multimodal,
                          tag_separator             =   args.tag_separator,
                          field_separator           =   args.field_separator,
-                         no_tagnames               =   args.no_tagnames)
+                         no_tagnames               =   args.no_tagnames,
+                         drop_alt_seqtype          =   args.drop_alt_seqtype,
+                         include_common_seq_tag    =   args.include_common_seq_tag)
 
 
 def helper_return_args():
@@ -43,11 +48,13 @@ def helper_return_args():
     '''
     return Namespace(is_nextseq                =   False,
                      is_duplex                 =   False,
+                     is_multimodal             =   False,
                      seqtype                   =   "dna",
                      max_mismatch_rate_primer  =   0.12,
                      max_mismatch_rate_overlap =   0.12,
                      custom_seq_adapter        =   b"AATGTACAGTATTGCGTTTTG",
                      umi_len                   =   12,
+                     umi_len_alt               =   None,
                      common_seq_len            =   11,
                      overlap_check_len         =   25,
                      min_primer_side_len       =   50,
@@ -65,7 +72,10 @@ def helper_return_args():
                      tagname_duplex            =   b"DU",
                      tagname_primer            =   b"pr",
                      tagname_primer_error      =   b"pe",
+                     tagname_multimodal        =   b"MM",
                      tag_separator             =   b"\t",
                      field_separator           =   b"\n",
-                     no_tagnames               =   False)
+                     no_tagnames               =   False,
+                     drop_alt_seqtype          =   False,
+                     include_common_seq_tag    =   False)
         

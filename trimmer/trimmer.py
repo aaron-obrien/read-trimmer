@@ -136,6 +136,7 @@ class Trimmer(object):
         self.max_mismatch_rate_primer  = kwargs["max_mismatch_rate_primer"]
         self.max_mismatch_rate_overlap = kwargs["max_mismatch_rate_overlap"]
         self.umi_len                   = kwargs["umi_len"]
+        self.umi_len_alt               = kwargs["umi_len_alt"]
         self.common_seq_len            = kwargs["common_seq_len"]
         self.check_primer_side         = kwargs["check_primer_side"]
         self.overlap_check_len         = kwargs["overlap_check_len"]        
@@ -156,6 +157,8 @@ class Trimmer(object):
         self.custom_seq_adapter        = kwargs["custom_seq_adapter"]
         self.poly_tail_primer_side     = kwargs["poly_tail_primer_side"]
         self.poly_tail_umi_side        = kwargs["poly_tail_umi_side"]
+        self.drop_alt_seqtype          = kwargs["drop_alt_seqtype"]
+        self.include_common_seq_tag    = kwargs["include_common_seq_tag"]
         
         # user can overide these defaults if needed
         self._k = 8  # kmer size
