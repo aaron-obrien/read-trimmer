@@ -14,4 +14,4 @@ script:
   - git clone https://github.com/qiaseq/read-trimmer.git
   - cd read-trimmer
   - sudo docker build -t qiaseq/read-trimmer .
-
+  - sudo docker run --entrypoint python qiaseq/read-trimmer /read-trimmer/tests/test_qiaseq_trim.py -v
