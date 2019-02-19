@@ -1,8 +1,10 @@
-import multiprocessing
-import gzip
 import functools
+import gzip
 import logging
+import multiprocessing
 import sys
+import threading
+import types
 
 import edlib
 
@@ -10,7 +12,7 @@ from pprint import pprint
 
 from trimmer import PrimerDataStruct, Trimmer
 from _utils import two_fastq_heads
-
+from prefetch_generator import BackgroundGenerator
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -30,9 +32,10 @@ class QiaSeqTrimmer(Trimmer):
         self.seqtype = kwargs["seqtype"]
         
         # some duplex specific params
-        self.tagname_duplex = kwargs["tagname_duplex"]
-        self.is_duplex = kwargs["is_duplex"]
-        if self.is_nextseq:
+        self.tagname_duplex     = kwargs["tagname_duplex"]
+        self.is_duplex          = kwargs["is_duplex"]
+        self.is_phased_adapters = kwargs["is_phased_adapters"]
+        if self.is_phased_adapters:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT",b"GTTCTGAGCGAYYATAGGAGTCCT",
                                      b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
         else:
@@ -515,6 +518,7 @@ def trim_custom_sequencing_adapter(args,buffers):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_phased_adapters        = args.is_phased_adapters,
         is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
@@ -566,12 +570,13 @@ def trim_custom_sequencing_adapter(args,buffers):
         i+=1
     return (num_reads,float(num_reads_have_adapter)/num_reads > 0.95)
     
-def wrapper_func(args,buffer_):
+def wrapper_func(args,queue,buffer_):
     ''' This is the function called in parallel.
     Initilializes trimmer object and counters. Makes function calls
     and accumulates results for each batch/buffer
     
     :param ArgparseObject args: Command line arguments
+    :param queue Process/Thread Safe Queue
     :param bytestring buffers_: A bytestring of length buffersize returned by the iterate_fastq function
 
     :rtype tuple
@@ -580,6 +585,7 @@ def wrapper_func(args,buffer_):
     trim_obj = QiaSeqTrimmer(
         is_nextseq                = args.is_nextseq,
         is_duplex                 = args.is_duplex,
+        is_phased_adapters        = args.is_phased_adapters,
         is_multimodal             = args.is_multimodal,
         seqtype                   = args.seqtype,
         max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
@@ -618,37 +624,7 @@ def wrapper_func(args,buffer_):
     r2_lines        = buff_r2.split(b"\n")
     
     # init some counters
-    # general bookkeeping
-    num_reads_after_trim  = 0    
-    num_too_short         = 0
-    num_odd               = 0
-    num_bad_umi           = 0
-    num_no_duplex         = 0
-    num_no_UMIend_adapter = 0
-    num_UMIend_alt        = 0
-    num_reads             = 0
-    num_r1_primer_trimmed = 0
-    num_r1_syn_trimmed    = 0
-    num_r2_primer_trimmed = 0
-    num_r1_r2_overlap     = 0    
-    # duplex specific
-    num_CC = 0
-    num_TT = 0
-    num_NN = 0
-    # multimodal specific
-    num_UMIend_B   = 0
-    num_UMIend_RT  = 0
-    num_UMIend_TSO = 0
-    # quality trimming
-    num_qual_trim_bases_r1 = 0
-    num_qual_trim_bases_r2 = 0
-    num_qual_trim_r1       = 0
-    num_qual_trim_r2       = 0
-    # polyA/T trimming
-    num_poly_trim_bases_primer = 0
-    num_poly_trim_bases_umi    = 0
-    num_poly_trim_primer       = 0
-    num_poly_trim_umi          = 0
+    counters = init_metrics()
 
     # store r1 and r2 lines
     out_lines_r1_bucket = []
@@ -665,7 +641,7 @@ def wrapper_func(args,buffer_):
         elif i % 4 == 3: # placeholder
             pass
         elif i % 4 == 0: # qual
-            num_reads += 1
+            counters.total_reads += 1
 
             r1_qual,r2_qual = line
             # have R1 and R2 ready to process now
@@ -679,42 +655,42 @@ def wrapper_func(args,buffer_):
             trim_obj.qiaseq_trim(primer_datastruct)
 
             if trim_obj.is_r1_poly_tail_trim:
-                num_poly_trim_bases_primer += trim_obj.r1_poly_tail_trim_len
-                num_poly_trim_primer += 1
+                counters.num_poly_trim_bases_primer += trim_obj.r1_poly_tail_trim_len
+                counters.num_poly_trim_primer += 1
             if trim_obj.is_r2_poly_tail_trim:
-                num_poly_trim_bases_umi += trim_obj.r2_poly_tail_trim_len
-                num_poly_trim_umi += 1
+                counters.num_poly_trim_bases_umi += trim_obj.r2_poly_tail_trim_len
+                counters.num_poly_trim_umi += 1
                 
             if trim_obj.is_too_short:
-                num_too_short += 1
+                counters.num_too_short += 1
                 i += 1
                 continue
             elif trim_obj.is_odd_structure:
-                num_odd += 1
+                counters.num_odd += 1
                 i += 1
                 continue
             elif trim_obj.is_bad_umi:
                 assert args.seqtype == "rna","UMI filter only applicable for speRNA reads!"
-                num_bad_umi+=1
+                counters.num_bad_umi+=1
                 i += 1
                 continue
             
             if args.is_duplex and not trim_obj.is_duplex_adapter_present:
-                num_no_duplex += 1
+                counters.num_no_duplex += 1
                 i += 1
                 continue
             
             if args.is_multimodal and not trim_obj.is_multimodal_adapter_present:
-                num_no_UMIend_adapter += 1
+                counters.num_no_UMIend_adapter += 1
                 i += 1
                 continue
 
             if trim_obj.is_r1_qual_trim:
-                num_qual_trim_bases_r1 += trim_obj.r1_qual_trim_len
-                num_qual_trim_r1 += 1
+                counters.num_r1_qual_trim_bases += trim_obj.r1_qual_trim_len
+                counters.num_r1_qual_trim += 1
             if trim_obj.is_r2_qual_trim:
-                num_qual_trim_bases_r2 += trim_obj.r2_qual_trim_len
-                num_qual_trim_r2 += 1            
+                counters.num_r2_qual_trim_bases += trim_obj.r2_qual_trim_len
+                counters.num_r2_qual_trim += 1            
             
             # retrieve trimmed sequences
             if args.is_r2_primer_side:
@@ -728,55 +704,123 @@ def wrapper_func(args,buffer_):
             trimmed_r2_lines = trim_obj.field_separator.join([trimmed_r2_info[0],trimmed_r2_info[1],b"+",trimmed_r2_info[2]])
 
             if trim_obj.is_r1_primer_trimmed:
-                num_r1_primer_trimmed += 1
+                counters.num_r1_primer_trimmed += 1
             if trim_obj.is_r1_syn_trimmed:
-                num_r1_syn_trimmed += 1                
+                counters.num_r1_syn_trimmed += 1                
             if trim_obj.is_r2_primer_trimmed:
-                num_r2_primer_trimmed += 1
+                counters.num_r2_primer_trimmed += 1
             if trim_obj.is_r1_r2_overlap:
-                num_r1_r2_overlap += 1
+                counters.num_r1_r2_overlap += 1
                 
             if args.is_duplex:
                 duplex_tag = trim_obj.duplex_tag
                 if duplex_tag == b"CC":
-                    num_CC += 1
+                    counters.num_CC += 1
                 elif duplex_tag == b"TT":
-                    num_TT += 1
+                    counters.num_TT += 1
                 elif duplex_tag == b"NN":
-                    num_NN += 1
+                    counters.num_NN += 1
                 else:
                     raise Exception("Invalid duplex tag : {}".format(duplex_tag.decode("ascii")))
 
             if args.is_multimodal:
                 multimodal_adapter_name = trim_obj.multimodal_adapter_name
                 if multimodal_adapter_name == b"B":
-                    num_UMIend_B += 1
+                    counters.num_UMIend_B += 1
                 elif multimodal_adapter_name == b"RT":
-                    num_UMIend_RT += 1
+                    counters.num_UMIend_RT += 1
                 elif multimodal_adapter_name == b"TSO":
-                    num_UMIend_TSO += 1
+                    counters.num_UMIend_TSO += 1
                 else:
                     raise Exception("Invalid UMI side common sequence (multimodal) : {}".format(multimodal_adapter_name.decode("ascii")))
                 if trim_obj.is_multimodal_alt_seq:
-                    num_UMIend_alt += 1
+                    counters.num_UMIend_alt += 1
                     if args.drop_alt_seqtype:
                         i += 1
                         continue
 
             out_lines_r1_bucket.append(trimmed_r1_lines)
             out_lines_r2_bucket.append(trimmed_r2_lines)
-            num_reads_after_trim += 1
-            
-        i += 1
-        
-    metrics = (num_r1_primer_trimmed,num_r1_syn_trimmed,num_r2_primer_trimmed,num_r1_r2_overlap,num_too_short,num_odd,num_bad_umi,num_reads,num_qual_trim_bases_r1,num_qual_trim_bases_r2,num_qual_trim_r1,num_qual_trim_r2,num_poly_trim_bases_primer,num_poly_trim_primer,num_poly_trim_bases_umi,num_poly_trim_umi,num_CC,num_TT,num_NN,num_no_duplex,num_UMIend_B,num_UMIend_RT,num_UMIend_TSO,num_no_UMIend_adapter,num_UMIend_alt,num_reads_after_trim)
+            counters.num_after_trim += 1
+
+        i += 1 # END for line in zip(r1_lines,r2_lines):
+
     out_lines_R1 = b"\n".join(out_lines_r1_bucket)
     out_lines_R2 = b"\n".join(out_lines_r2_bucket)
 
-    return (out_lines_R1,out_lines_R2,metrics)
+    queue.put((out_lines_R1,out_lines_R2,counters))
+
+
+def init_metrics():
+    ''' Init a SimpleNamespace object to store metrics,
+    assign all metrics 0 initial value
+    '''
+    metrics = types.SimpleNamespace()
+    # general bookkeeping
+    metrics.total_reads           = 0
+    metrics.num_after_trim        = 0    
+    metrics.num_too_short         = 0
+    metrics.num_odd               = 0
+    metrics.num_bad_umi           = 0
+    metrics.num_no_duplex         = 0
+    metrics.num_no_UMIend_adapter = 0
+    metrics.num_UMIend_alt        = 0
+    metrics.num_r1_primer_trimmed = 0
+    metrics.num_r1_syn_trimmed    = 0
+    metrics.num_r2_primer_trimmed = 0
+    metrics.num_r1_r2_overlap     = 0
+    # duplex specific
+    metrics.num_CC = 0
+    metrics.num_TT = 0
+    metrics.num_NN = 0
+    # multimodal specific
+    metrics.num_UMIend_B   = 0
+    metrics.num_UMIend_RT  = 0
+    metrics.num_UMIend_TSO = 0
+    # quality trimming
+    metrics.num_r1_qual_trim_bases = 0
+    metrics.num_r2_qual_trim_bases = 0
+    metrics.num_r1_qual_trim       = 0
+    metrics.num_r2_qual_trim       = 0
+    # polyA/T trimming
+    metrics.num_poly_trim_bases_primer = 0
+    metrics.num_poly_trim_bases_umi    = 0
+    metrics.num_poly_trim_primer       = 0
+    metrics.num_poly_trim_umi          = 0
+
+    return metrics
+
+def aggregator_and_writer(queue,f_out_r1,f2_out_r2,return_queue):
+    ''' Aggregate metrics across batches and write the trimmed fastq file
+    Runs akin to a consumer thread
+    '''
+    # init metric object
+    metrics = init_metrics()
+
+    to_return = None
+    while True:
+        if not queue.empty():
+            buffer = queue.get()
+            if buffer is None: # no more to consume
+                return_queue.put(metrics)
+                return
+            
+            trimmed_r1_lines, trimmed_r2_lines, counters = buffer
+
+            # unpack and accumulate metric counters
+            for metric,val in counters.__dict__.items():
+                assert metric in metrics.__dict__, "Encountered unknown metric : {}".format(metric)
+                metrics.__dict__[metric] += val
+
+            # write to disk
+            f_out_r1.write(trimmed_r1_lines)
+            f_out_r1.write(b"\n")
+            f2_out_r2.write(trimmed_r2_lines)
+            f2_out_r2.write(b"\n")
+            logger.info("Processed : {n} reads".format(n=metrics.total_reads))
 
             
-def iterate_fastq(f,f2,ncpu,buffer_size=4*4*1024**2):
+def iterate_fastq(f,f2,ncpu,buffer_size=2*1024**2):
     ''' Copied from cutadapt, 
     added logic to yield a list of buffers equal to the number of CPUs
     :param file_handle f:  R1 fastq
@@ -829,9 +873,6 @@ def iterate_fastq(f,f2,ncpu,buffer_size=4*4*1024**2):
     if len(to_yield) > 0:
         yield to_yield
 
-def init(l):
-    global lock
-    lock = l
 
 def open_fh(fname1,fname2,read=True):
     ''' Return appropriate file handles
@@ -846,6 +887,7 @@ def open_fh(fname1,fname2,read=True):
         return (gzip.open(fname1,mode),gzip.open(fname2,mode))
     else:
         return (open(fname1,mode),open(fname2,mode))
+
     
 def close_fh(fh1,fh2):
     ''' Closes file handles
@@ -854,6 +896,7 @@ def close_fh(fh1,fh2):
     '''
     fh1.close()
     fh2.close()
+
     
 def main(args):
     ''' Calls wrapper func for trimming in parallel using multiprocessing,
@@ -881,7 +924,6 @@ def main(args):
     primer_datastruct = PrimerDataStruct(k=8,primer_file=args.primer_file,
                                          ncpu=args.ncpu,seqtype=args.seqtype,
                                          primer_col=args.primer_col).primer_search_datastruct
-    l = multiprocessing.Lock()
 
     logger.info("\n{}\n".format("--"*10))
     logger.info("Created Primer Datastruct\n")
@@ -904,169 +946,112 @@ def main(args):
         
     logger.info("\nRunning program with args : {}\n".format(args))
 
-    num_r1_primer_trimmed = 0
-    num_r1_syn_trimmed    = 0
-    num_r2_primer_trimmed = 0
-    num_r1_r2_overlap     = 0
-    num_too_short         = 0
-    num_odd               = 0
-    num_bad_umi           = 0
-    num_no_duplex         = 0
-    num_no_UMIend_adapter = 0
-    num_UMIend_alt        = 0
-    total_reads           = 0
-    num_after_trim        = 0
-    
-    num_qual_trim_r1_bases = 0
-    num_qual_trim_r2_bases = 0
-    num_qual_trim_r1 = 0
-    num_qual_trim_r2 = 0
-
-    num_poly_trim_bases_primer  = 0
-    num_poly_trim_primer        = 0
-    num_poly_trim_bases_umi     = 0
-    num_poly_trim_umi           = 0 
-    
-    num_CC = 0
-    num_TT = 0
-    num_NN = 0    
-    
-    num_UMIend_TSO = 0
-    num_UMIend_RT  = 0
-    num_UMIend_B   = 0
-    
     nchunk = 1
 
     f,f2 = open_fh(r1,r2)
     f_out_r1,f2_out_r2 = open_fh(out_r1,out_r2,read=False)
+
+    m = multiprocessing.Manager()
+    queue = m.Queue()
+    p = multiprocessing.Pool(args.ncpu)
+    func = functools.partial(wrapper_func,args,queue)
     
-    p = multiprocessing.Pool(args.ncpu,initializer=init, initargs=(l,))
-    func = functools.partial(wrapper_func,args)
-    
-    for chunks in iterate_fastq(f,f2,args.ncpu):
-        res = p.map(func,chunks)
+    # start fastq writer/consumer thread
+    return_queue = multiprocessing.Queue()
+    writer_thread = threading.Thread(
+        target = aggregator_and_writer,
+        args = (queue,f_out_r1,f2_out_r2,return_queue),daemon = True)
+    writer_thread.start()
 
-        for trimmed_r1_lines,trimmed_r2_lines,counter_tup in res:
+    for chunks in BackgroundGenerator(iterate_fastq(f,f2,args.ncpu),
+                                      max_prefetch = 4):
+        p.map(func,chunks)
 
-            # unpack counters
-            num_r1_primer_trimmed   +=  counter_tup[0]
-            num_r1_syn_trimmed      +=  counter_tup[1]
-            num_r2_primer_trimmed   +=  counter_tup[2]
-            num_r1_r2_overlap       +=  counter_tup[3]
-            num_too_short           +=  counter_tup[4]
-            num_odd                 +=  counter_tup[5]
-            num_bad_umi             +=  counter_tup[6]
-            total_reads             +=  counter_tup[7]
-            
-            num_qual_trim_r1_bases  +=  counter_tup[8]
-            num_qual_trim_r2_bases  +=  counter_tup[9]        
-            num_qual_trim_r1        +=  counter_tup[10]
-            num_qual_trim_r2        +=  counter_tup[11]
-
-            num_poly_trim_bases_primer += counter_tup[12]
-            num_poly_trim_primer       += counter_tup[13]
-            num_poly_trim_bases_umi    += counter_tup[14]
-            num_poly_trim_umi          += counter_tup[15]            
-            
-            num_CC         +=  counter_tup[16]
-            num_TT         +=  counter_tup[17]
-            num_NN         +=  counter_tup[18]
-            num_no_duplex  +=  counter_tup[19]
-            
-            num_UMIend_B          += counter_tup[20]
-            num_UMIend_RT         += counter_tup[21]
-            num_UMIend_TSO        += counter_tup[22]
-            num_no_UMIend_adapter += counter_tup[23]
-            num_UMIend_alt        += counter_tup[24]
-
-            num_after_trim +=  counter_tup[25]
-
-            f_out_r1.write(trimmed_r1_lines)
-            f_out_r1.write(b"\n")
-            f2_out_r2.write(trimmed_r2_lines)
-            f2_out_r2.write(b"\n")
-            
-            nchunk += 1
-            logger.info("Processed : {n} reads".format(n=total_reads))
-            
+    # clear process pool
     p.close()
     p.join()
+    queue.put(None)
+    # wait on writer thread
+    writer_thread.join()
 
-    thousand_comma = lambda x: "{:,}".format(x) if args.thousand_comma else str(x) 
-    
+    metrics = return_queue.get()
+    assert metrics is not None, "Unexpected metric accumulation !"
+
+    thousand_comma = lambda x: "{:,}".format(x) if args.thousand_comma else str(x)
+
     out_metrics = [
-        thousand_comma(total_reads) + "\tTotal read fragments",
-        thousand_comma(num_r1_primer_trimmed) + "\tNum SPE side reads with primer identified",
-        thousand_comma(num_r1_syn_trimmed) + "\tNum SPE side reads with 3' synthetic oligo trimmed",
-        thousand_comma(num_r2_primer_trimmed) + "\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
-        thousand_comma(num_r1_r2_overlap) + "\tNum read fragments overlapping",
-        thousand_comma(num_qual_trim_r1) + "\tNum SPE side reads qual trimmed",
-        thousand_comma(num_qual_trim_r2) + "\tNum UMI side reads qual trimmed",        
+        thousand_comma(metrics.total_reads) + "\tTotal read fragments",
+        thousand_comma(metrics.num_r1_primer_trimmed) + "\tNum SPE side reads with primer identified",
+        thousand_comma(metrics.num_r1_syn_trimmed) + "\tNum SPE side reads with 3' synthetic oligo trimmed",
+        thousand_comma(metrics.num_r2_primer_trimmed) + "\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
+        thousand_comma(metrics.num_r1_r2_overlap) + "\tNum read fragments overlapping",
+        thousand_comma(metrics.num_r1_qual_trim) + "\tNum SPE side reads qual trimmed",
+        thousand_comma(metrics.num_r2_qual_trim) + "\tNum UMI side reads qual trimmed",        
         "{qual_trim_r1}\tAvg num SPE side bases qual trimmed",
         "{qual_trim_r2}\tAvg num UMI side bases qual trimmed",
     ]
     out_metrics_dropped = [
-        thousand_comma(num_too_short) + "\tNum read fragments dropped too short",
-        thousand_comma(num_odd) + "\tNum read fragments dropped odd structure (usually SPE side has only primer sequence)"
+        thousand_comma(metrics.num_too_short) + "\tNum read fragments dropped too short",
+        thousand_comma(metrics.num_odd) + "\tNum read fragments dropped odd structure (usually SPE side has only primer sequence)"
     ]
-    total_dropped = num_too_short + num_odd
+    total_dropped = metrics.num_too_short + metrics.num_odd
     
     if args.is_duplex:
         out_metrics.extend(
-            [thousand_comma(num_CC) + "\tNum CC reads",
-             thousand_comma(num_TT) + "\tNum TT reads",
-             thousand_comma(num_NN) + "\tNum NN reads"])
-        out_metrics_dropped.append(thousand_comma(num_no_duplex) + "\tNum read fragments dropped (no duplex adapter)")
-        total_dropped += num_no_duplex
+            [thousand_comma(metrics.num_CC) + "\tNum CC reads",
+             thousand_comma(metrics.num_TT) + "\tNum TT reads",
+             thousand_comma(metrics.num_NN) + "\tNum NN reads"])
+        out_metrics_dropped.append(thousand_comma(metrics.num_no_duplex) + "\tNum read fragments dropped (no duplex adapter)")
+        total_dropped += metrics.num_no_duplex
 
     if args.is_multimodal:
         out_metrics.extend(
-            [thousand_comma(num_UMIend_B)   + "\tNum UMI side reads with common sequence B",
-             thousand_comma(num_UMIend_RT)  + "\tNum UMI side reads with common sequence RT",
-             thousand_comma(num_UMIend_TSO) + "\tNum UMI side reads with common sequence TSO"])
+            [thousand_comma(metrics.num_UMIend_B)   + "\tNum UMI side reads with common sequence B",
+             thousand_comma(metrics.num_UMIend_RT)  + "\tNum UMI side reads with common sequence RT",
+             thousand_comma(metrics.num_UMIend_TSO) + "\tNum UMI side reads with common sequence TSO"])
         if args.drop_alt_seqtype:
-            out_metrics_dropped.append(thousand_comma(num_UMIend_alt) + "\tNum fragments dropped (multimodal alternative sequence type)")
-            total_dropped += num_UMIend_alt
+            out_metrics_dropped.append(thousand_comma(metrics.num_UMIend_alt) + "\tNum fragments dropped (multimodal alternative sequence type)")
+            total_dropped += metrics.num_UMIend_alt
         else:
-            out_metrics.append(thousand_comma(num_UMIend_alt) + "\tNum fragments from multumodal alternative sequence type")
-        out_metrics_dropped.append(thousand_comma(num_no_UMIend_adapter) + "\tNum fragments dropped (no common sequence)")
-        total_dropped += num_no_UMIend_adapter
+            out_metrics.append(thousand_comma(metrics.num_UMIend_alt) + "\tNum fragments from multumodal alternative sequence type")
+        out_metrics_dropped.append(thousand_comma(metrics.num_no_UMIend_adapter) + "\tNum fragments dropped (no common sequence)")
+        total_dropped += metrics.num_no_UMIend_adapter
 
     if args.seqtype == "rna":
         if args.poly_tail_primer_side != "none":
             out_metrics.extend(
                 ["{p1_trim}\tAvg num bases {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side,
-                                                                            p1_trim = 0 if num_poly_trim_bases_primer == 0 else \
-                                                                            round(float(num_poly_trim_bases_primer)/num_poly_trim_primer,2)),
-                 thousand_comma(num_poly_trim_primer) + "\tNum reads {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side)])
+                                                                            p1_trim = 0 if metrics.num_poly_trim_bases_primer == 0 else \
+                                                                            round(float(metrics.num_poly_trim_bases_primer)/metrics.num_poly_trim_primer,2)),
+                 thousand_comma(metrics.num_poly_trim_primer) + "\tNum reads {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side)])
         if args.poly_tail_umi_side != "none":
             out_metrics.extend(
                 ["{p2_trim}\tAvg num bases {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side,
-                                                                         p2_trim = 0 if num_poly_trim_bases_umi == 0 else \
-                                                                         round(float(num_poly_trim_bases_umi)/num_poly_trim_umi,2)),
-                 thousand_comma(num_poly_trim_umi) + "\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side)])
+                                                                         p2_trim = 0 if metrics.num_poly_trim_bases_umi == 0 else \
+                                                                         round(float(metrics.num_poly_trim_bases_umi)/metrics.num_poly_trim_umi,2)),
+                 thousand_comma(metrics.num_poly_trim_umi) + "\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side)])
 
-        out_metrics_dropped.append(thousand_comma(num_bad_umi) + "\tNum read fragments dropped bad UMI")
-        total_dropped += num_bad_umi       
+        out_metrics_dropped.append(thousand_comma(metrics.num_bad_umi) + "\tNum read fragments dropped bad UMI")
+        total_dropped += metrics.num_bad_umi
 
-    out_metrics.extend(out_metrics_dropped)                                                                          
-    out_metrics.append(thousand_comma(num_after_trim) + "\tNum read fragments after trimming")
-    out_metrics.append("{pct_after_trim} \tPct read fragments after trimming".format(pct_after_trim = round(100*num_after_trim/total_reads, 2) if total_reads else 0.00))
+    out_metrics.extend(out_metrics_dropped)                                                                         
+    out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tNum read fragments after trimming")
+    out_metrics.append("{pct_after_trim} \tPct read fragments after trimming".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
     
-    out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if num_qual_trim_r1_bases == 0 else \
-                                                      round(float(num_qual_trim_r1_bases)/(num_qual_trim_r1),2),
-                                                      qual_trim_r2 = 0 if num_qual_trim_r2_bases == 0 else \
-                                                      round(float(num_qual_trim_r2_bases)/(num_qual_trim_r2),2))
+    out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if metrics.num_r1_qual_trim_bases == 0 else \
+                                                      round(float(metrics.num_r1_qual_trim_bases)/(metrics.num_r1_qual_trim),2),
+                                                      qual_trim_r2 = 0 if metrics.num_r2_qual_trim_bases == 0 else \
+                                                      round(float(metrics.num_r2_qual_trim_bases)/(metrics.num_r2_qual_trim),2))
     
-    f_out_metrics = open(args.out_metrics,"w")                                                      
+    f_out_metrics = open(args.out_metrics,"w")
     f_out_metrics.write(out_metrics_lines)
-    f_out_metrics.write("\n")   
+    f_out_metrics.write("\n")
     
     close_fh(f,f2)
     close_fh(f_out_r1,f2_out_r2)
     f_out_metrics.close()
         
-    assert num_after_trim + total_dropped == total_reads, "Read accouting failed !"
+    assert metrics.num_after_trim + total_dropped == metrics.total_reads, "Read accouting failed !"
     
 if __name__ == '__main__':
     main()
