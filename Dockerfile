@@ -13,14 +13,13 @@ ARG branch=master
 RUN pip3 install edlib Cython
 
 # Initial installation of the trimming code
-RUN git clone -b ${branch} https://github.com/${repository}/read-trimmer && cd read-trimmer && python3 setup.py build_ext --inplace
+RUN git clone -b ${branch} https://github.com/${repository}/read-trimmer
 
 # install the wrapper script that will run updates before the actual trimming
 RUN echo '#!/bin/bash\n\
 echo "# [$(date)] Running code updates ..."\n\
 cd /read-trimmer\n\
 git pull origin ${branch}\n\
-python3 setup.py build_ext --inplace\n\
 echo "# [$(date)] Code updated."\n\
 python3 /read-trimmer/trimmer/run.py "$@"' > /trim
 

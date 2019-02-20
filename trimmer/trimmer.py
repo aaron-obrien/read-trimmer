@@ -8,6 +8,7 @@ import os
 import pickle
 import multiprocessing
 
+import pyximport; pyximport.install()
 from _utils import quality_trim
 
 class PrimerDataStruct(object):
