@@ -11,6 +11,7 @@ import edlib
 from pprint import pprint
 
 from trimmer import PrimerDataStruct, Trimmer
+import pyximport; pyximport.install(language_level=3)
 from _utils import two_fastq_heads
 from prefetch_generator import BackgroundGenerator
 
@@ -252,8 +253,8 @@ class QiaSeqTrimmer(Trimmer):
             return True
         counter = 0
         base = 33
-        for q in umi_qual.decode("ascii"):
-            qual = ord(q) - base
+        for q in umi_qual:
+            qual = q - base # no need for ord for a character in a byte string
             if qual < self.umi_filter_min_bq:
                 counter+=1
                 

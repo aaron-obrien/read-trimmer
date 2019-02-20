@@ -24,14 +24,14 @@ def two_fastq_heads(bytes_or_bytearray buf1, bytes_or_bytearray buf2, Py_ssize_t
         unsigned char * data2 = buf2
         Py_ssize_t record_start1 = 0
         Py_ssize_t record_start2 = 0
-
+    
     while True:
-        while pos1 < end1 and data1[pos1] != '\n':
+        while pos1 < end1 and data1[pos1] != b'\n':
             pos1 += 1
         if pos1 == end1:
             break
         pos1 += 1
-        while pos2 < end2 and data2[pos2] != '\n':
+        while pos2 < end2 and data2[pos2] != b'\n':
             pos2 += 1
         if pos2 == end2:
             break
@@ -46,7 +46,7 @@ def two_fastq_heads(bytes_or_bytearray buf1, bytes_or_bytearray buf2, Py_ssize_t
     return record_start1, record_start2
 
 
-def quality_trim(str qualities, str bases, int cutoff_back, bint is_nextseq, int base=33):
+def quality_trim(bytes qualities, bytes bases, int cutoff_back, bint is_nextseq, int base=33):
     '''
     '''
     cdef int s
@@ -59,10 +59,11 @@ def quality_trim(str qualities, str bases, int cutoff_back, bint is_nextseq, int
     max_qual = 0
     s = 0
     for i in reversed(xrange(len(qualities))):
-        if is_nextseq and bases[i] == "G":
+        if is_nextseq and bases[i] == b'G':
             q = cutoff_back - 1
         else:
-            q = ord(qualities[i]) - base
+            q = qualities[i] - base
+
         s += cutoff_back - q
 
         if s < 0:
