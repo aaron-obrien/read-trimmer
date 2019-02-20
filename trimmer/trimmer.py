@@ -305,7 +305,7 @@ class Trimmer(object):
             return (-1,-1)        
         
     def quality_trim_(self,qual_string,seq_string,cutoff,base=33):
-        return quality_trim(qual_string.decode("ascii"),seq_string.decode("ascii"),cutoff,self.is_nextseq,base)
+        return quality_trim(qual_string,seq_string,cutoff,self.is_nextseq,base)
 
     def revcomp(self,seq):
         ''' Reverse complement a sequence
