@@ -11,7 +11,7 @@ import edlib
 from pprint import pprint
 
 from trimmer import PrimerDataStruct, Trimmer
-from _utils import two_fastq_heads
+from _utils import two_fastq_heads # is already built by the trimmer module
 from prefetch_generator import BackgroundGenerator
 
 logger = logging.getLogger(__name__)
