@@ -1,0 +1,21 @@
+sudo: required
+
+language: python
+
+services:
+  - docker
+
+before_install:
+  - mkdir test_folder
+
+script:
+  - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
+  - echo "TRAVIS_BRANCH=$TRAVIS_BRANCH, PR=$PR, BRANCH=$BRANCH"
+  - cd test_folder
+  - git clone -b $BRANCH https://github.com/qiaseq/read-trimmer.git
+  - cd read-trimmer
+  - sudo docker build -t qiaseq/read-trimmer --build-arg branch=$BRANCH .
+  - sudo docker run --entrypoint python qiaseq/read-trimmer /read-trimmer/tests/test_qiaseq_trim.py -v
+  - sudo docker run qiaseq/read-trimmer --r1 /read-trimmer/tests/test_data/test_dna_R1.fastq.gz --r2 /read-trimmer/tests/test_data/test_dna_R2.fastq.gz --out_r1 temp.R1.fastq --out_r2 temp.R2.fastq --out_metrics temp.metrics.txt --seqtype dna --primer_file /read-trimmer/tests/test_data/test_dna_primers_2.txt --primer_col 3 --umi_len 12 --common_seq_len 8
+  - sudo docker run qiaseq/read-trimmer --r1 /read-trimmer/tests/test_data/test_duplex_R1.fastq.gz --r2 /read-trimmer/tests/test_data/test_duplex_R2.fastq.gz --out_r1 temp.R1.fastq --out_r2 temp.R2.fastq --out_metrics temp.metrics.txt --seqtype dna --primer_file /read-trimmer/tests/test_data/test_duplex_primers.txt --primer_col 3 --umi_len 12 --common_seq_len 8 --is_duplex --is_phased_adapters --is_nextseq
+
