@@ -190,6 +190,53 @@ class Trimmer(object):
         assert isinstance(val,int),"Please specify an integer value for k"
         self._r = val
 
+    '''
+    Assumption made is that R1 is the Primer side , R2 is the UMI side.
+    If the structure is the opposite , one can do so by flipping R1 and R2 setters
+    '''
+    # R1 info
+    @property
+    def r1_info(self):
+        return self._r1_info
+    @r1_info.setter
+    def r1_info(self,info_tuple):
+        self._r1_info = info_tuple
+    # R2 info
+    @property
+    def r2_info(self):
+        return self._r2_info
+    @r2_info.setter
+    def r2_info(self,info_tuple):
+        self._r2_info = info_tuple
+
+    # some checks on fastq format
+    def check_fastq_format(self):
+        ''' Check to make sure reads adhere to FastQ format
+        '''
+        # unpack R1,R2 info
+        r1_id,r1_seq,r1_qual = self._r1_info
+        r2_id,r2_seq,r2_qual = self._r2_info
+
+        if not r1_id.split(b" ")[0] == r2_id.split(b" ")[0]:
+            raise UserWarning("R1: {} R2: {} read ids are different".format(
+                r1_id.decode("ascii"), r2_id.decode("ascii")))
+
+        if not r1_id.startswith(b"@"):
+            raise UserWarning("Read ID : {} does not startwith @".format(
+                r1_id.decode("ascii")))
+
+        if not len(r1_qual) == len(r1_seq):
+            raise UserWarning("R1 Qual: {} and Seq: {} lengths differ".format(
+                r1_qual.decode("ascii"), r1_seq.decode("ascii")))
+
+        if not len(r2_qual) == len(r2_seq):
+            raise UserWarning("R2 Qual: {} and Seq: {} lengths differ".format(
+                r2_qual.decode("ascii"), r2_seq.decode("ascii")))
+        
+        if len(r2_seq) == 0:
+            raise UserWarning("Empty Fastq sequence for Read : {}".format(
+                r1_id.decode("ascii")))
+        
     def custom_sequencing_adapter_check(self,r1_seq):
         ''' Check for custom sequencing adapter on r1
         :param bytes r1_seq: R1 sequence
