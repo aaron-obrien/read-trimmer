@@ -10,15 +10,57 @@ import edlib
 
 from pprint import pprint
 
-from trimmer import PrimerDataStruct, Trimmer
+import helper
 import pyximport; pyximport.install(language_level=3)
 from _utils import two_fastq_heads
+from trimmer import PrimerDataStruct, Trimmer
 from prefetch_generator import BackgroundGenerator
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler(sys.stdout)
 logger.addHandler(ch)
+
+
+def helper_return_qiaseq_obj(args):
+    ''' Helper function to initiliaze Trimmer Object
+    '''
+    return QiaSeqTrimmer(is_nextseq                   =   args.is_nextseq,
+                         is_duplex                    =   args.is_duplex,
+                         is_phased_adapters           =   args.is_phased_adapters,
+                         is_multimodal                =   args.is_multimodal,
+                         is_umi_side_adapter_readable =   args.is_umi_side_adapter_readable,
+                         seqtype                      =   args.seqtype,
+                         max_mismatch_rate_primer     =   args.max_mismatch_rate_primer,
+                         max_mismatch_rate_overlap    =   args.max_mismatch_rate_overlap,
+                         custom_seq_adapter           =   args.custom_seq_adapter,
+                         umi_len                      =   args.umi_len,
+                         umi_len_alt                  =   args.umi_len_alt,
+                         common_seq_len               =   args.common_seq_len,
+                         overlap_check_len            =   args.overlap_check_len,
+                         min_primer_side_len          =   args.min_primer_side_len,
+                         min_umi_side_len             =   args.min_umi_side_len,
+                         check_primer_side            =   args.check_primer_side,
+                         umi_filter_min_bq            =   args.umi_filter_min_bq,
+                         umi_filter_max_lowQ_bases    =   args.umi_filter_max_lowQ_bases,
+                         umi_filter_max_Ns            =   args.umi_filter_max_Ns,
+                         trim_custom_seq_adapter      =   args.trim_custom_seq_adapter,
+                         primer3_R1                   =   args.primer3_bases_R1,
+                         primer3_R2                   =   args.primer3_bases_R2,
+                         poly_tail_primer_side        =   args.poly_tail_primer_side,
+                         poly_tail_umi_side           =   args.poly_tail_umi_side,
+                         tagname_umi                  =   args.tagname_umi,
+                         tagname_duplex               =   args.tagname_duplex,
+                         tagname_primer               =   args.tagname_primer,
+                         tagname_primer_error         =   args.tagname_primer_error,
+                         tagname_multimodal           =   args.tagname_multimodal,
+                         tag_separator                =   args.tag_separator,
+                         field_separator              =   args.field_separator,
+                         no_tagnames                  =   args.no_tagnames,
+                         drop_alt_seqtype             =   args.drop_alt_seqtype,
+                         include_common_seq_tag       =   args.include_common_seq_tag)
+
 
 class QiaSeqTrimmer(Trimmer):
     '''
@@ -43,6 +85,7 @@ class QiaSeqTrimmer(Trimmer):
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT"]
             
         # some multimodal specific params
+        self.is_umi_side_adapter_readable = kwargs["is_umi_side_adapter_readable"] # move this out to the trimmer class if other products are using it.
         self.tagname_multimodal = kwargs["tagname_multimodal"]
         self.is_multimodal = kwargs["is_multimodal"]
         self._multimodal_UMIend_adapters = [(b"ATTGGAGTCCT", "dna", b"B"), (b"ACGTTTTTTTTTTTTTTTTTTVN", "rna", b"RT"), (b"ATCTGCGGG", "rna", b"TSO")]
@@ -86,28 +129,7 @@ class QiaSeqTrimmer(Trimmer):
     @property
     def is_r2_poly_tail_trim(self):
         return self._is_r2_poly_tail_trim
-    
-
-    '''
-    Assumption made is that R1 is the Primer side , R2 is the UMI side.
-    If the structure is the opposite , one can do so by flipping R1 and R2 setters
-    '''
-    # R1 info
-    @property
-    def r1_info(self):
-        return self._r1_info
-    @r1_info.setter
-    def r1_info(self,info_tuple):
-        self._r1_info = info_tuple
-    # R2 info
-    @property
-    def r2_info(self):
-        return self._r2_info
-    @r2_info.setter
-    def r2_info(self,info_tuple):
-        self._r2_info = info_tuple
-        
-        
+       
     # duplex specific vars
     @property
     def is_duplex_adapter_present(self):
@@ -163,7 +185,7 @@ class QiaSeqTrimmer(Trimmer):
     @property
     def is_multimodal_alt_seq(self):
         return self._is_multimodal_alt_seq
-        
+    
     def _id_multimodal_adapter_name(self,r2_seq):
         ''' Identify multimodal adapter sequence on UMI end
         :param bytes r2_seq: R2 sequence
@@ -307,21 +329,29 @@ class QiaSeqTrimmer(Trimmer):
         # identify duplex adapter and tag if needed
         if self.is_duplex:
             adapter_end_pos,self._duplex_tag = self._id_duplex_tag(r2_seq)
-            if adapter_end_pos == -1: # drop read                
-                return            
+            if adapter_end_pos == -1: # drop read
+                return
             # update synthetic oligo len
             self._is_duplex_adapter_present = True
             self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
             
         # identify multimodal UMI end adapter, if needed
         if self.is_multimodal:
-            adapter_end_pos,self._multimodal_adapter_name,umi_len,self._is_multimodal_alt_seq = self._id_multimodal_adapter_name(r2_seq)
-            if adapter_end_pos == -1: # drop read                
-                return            
-            # update synthetic oligo len
-            self._is_multimodal_adapter_present = True            
-            self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
-            
+            if self.is_umi_side_adapter_readable:
+                adapter_end_pos,self._multimodal_adapter_name,umi_len,self._is_multimodal_alt_seq = self._id_multimodal_adapter_name(r2_seq)
+                if adapter_end_pos == -1: # drop read
+                    return
+                # update synthetic oligo len
+                self._is_multimodal_adapter_present = True
+                self.synthetic_oligo_len = umi_len + (adapter_end_pos + 1)
+            else: # Use longest DNA/RNA adapter for fixed length trim
+                self._multimodal_adapter_name = b"RT" if self.seqtype == "rna" else b"B"
+                self._is_multimodal_alt_seq         = False
+                self._is_multimodal_adapter_present = True
+                longest_adapter_len = len(self._multimodal_UMIend_adapters[1][0]) if self.seqtype == "rna" \
+                                      else len(self._multimodal_UMIend_adapters[0][0])
+                self.synthetic_oligo_len = umi_len + longest_adapter_len
+
         # get umi
         synthetic_oligo_len = self.synthetic_oligo_len        
         if not r2_seq.startswith(b"N"):
@@ -509,6 +539,32 @@ class QiaSeqTrimmer(Trimmer):
         
         assert len(r1_seq) != 0 or len(r2_seq) != 0 or len(r1_qual) != 0 or len(r2_qual) != 0,"id:{readid}\tR1:{r1}\tR2:{r2}".format(readid=r1_id.decode("ascii"),r1=r1_seq.decode("ascii"),r2=r2_seq.decode("ascii"))
         
+def check_umi_side_adapter_readable(args,buffers):
+    ''' Returns whether to trim custom sequencing adapter or not
+    :param buffers: 2-tuple of R1,R2 lines as byte strings
+    :rtype tuple
+    :returns (num_reads,True/False)
+    '''
+    trim_obj = helper.helper_return_qiaseq_obj(args)
+    buff_r1,buff_r2 = buffers
+    r1_lines = buff_r1.split(b"\n")
+    r2_lines = buff_r2.split(b"\n")
+    
+    num_reads = 0
+    num_reads_have_adapter = 0
+    i = 1
+    for line in zip(r1_lines,r2_lines):
+        if line[0] == "": # last element is empty because of the split("\n") above
+            continue
+        if i % 4 == 2: # seq
+            r1_seq,r2_seq = line
+        elif i % 4 == 0: # qual
+            num_reads+=1
+            adapter_len,adapter_name,umi_len,is_alt_seq = trim_obj._id_multimodal_adapter_name(r2_seq)
+            if adapter_len != -1:
+                num_reads_have_adapter += 1
+        i+=1
+    return (num_reads,float(num_reads_have_adapter)/num_reads > 0.90)
 
 def trim_custom_sequencing_adapter(args,buffers):
     ''' Returns whether to trim custom sequencing adapter or not
@@ -516,42 +572,7 @@ def trim_custom_sequencing_adapter(args,buffers):
     :rtype tuple
     :returns (num_reads,True/False)
     '''
-    trim_obj = QiaSeqTrimmer(
-        is_nextseq                = args.is_nextseq,
-        is_duplex                 = args.is_duplex,
-        is_phased_adapters        = args.is_phased_adapters,
-        is_multimodal             = args.is_multimodal,
-        seqtype                   = args.seqtype,
-        max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
-        max_mismatch_rate_overlap = args.max_mismatch_rate_overlap,
-        custom_seq_adapter        = args.custom_seq_adapter,
-        umi_len                   = args.umi_len,
-        umi_len_alt               = args.umi_len_alt,
-        common_seq_len            = args.common_seq_len,
-        overlap_check_len         = args.overlap_check_len,
-        min_primer_side_len       = args.min_primer_side_len,
-        min_umi_side_len          = args.min_umi_side_len,
-        umi_filter_min_bq         = args.umi_filter_min_bq,
-        umi_filter_max_lowQ_bases = args.umi_filter_max_lowQ_bases,
-        umi_filter_max_Ns         = args.umi_filter_max_Ns,
-        check_primer_side         = args.check_primer_side,
-        trim_custom_seq_adapter   = False,
-        primer3_R1                = args.primer3_bases_R1,
-        primer3_R2                = args.primer3_bases_R2,
-        poly_tail_primer_side     = args.poly_tail_primer_side,
-        poly_tail_umi_side        = args.poly_tail_umi_side,
-        tagname_duplex            = args.tagname_duplex,
-        tagname_multimodal        = args.tagname_multimodal,
-        tagname_umi               = args.tagname_umi,
-        tagname_primer            = args.tagname_primer,
-        tagname_primer_error      = args.tagname_primer_error,
-        tag_separator             = args.tag_separator,
-        field_separator           = args.field_separator,
-        no_tagnames               = args.no_tagnames,
-        drop_alt_seqtype          = args.drop_alt_seqtype,
-        include_common_seq_tag    = args.include_common_seq_tag
-    )
-    
+    trim_obj = helper.helper_return_qiaseq_obj(args)
     buff_r1,buff_r2 = buffers
     r1_lines = buff_r1.split(b"\n")
     r2_lines = buff_r2.split(b"\n")
@@ -583,42 +604,7 @@ def wrapper_func(args,queue,buffer_):
     :rtype tuple
     :returns trimmed R1,R2 lines and metrics as a tuple
     '''
-    trim_obj = QiaSeqTrimmer(
-        is_nextseq                = args.is_nextseq,
-        is_duplex                 = args.is_duplex,
-        is_phased_adapters        = args.is_phased_adapters,
-        is_multimodal             = args.is_multimodal,
-        seqtype                   = args.seqtype,
-        max_mismatch_rate_primer  = args.max_mismatch_rate_primer,
-        max_mismatch_rate_overlap = args.max_mismatch_rate_overlap,
-        custom_seq_adapter        = args.custom_seq_adapter,
-        umi_len                   = args.umi_len,
-        umi_len_alt               = args.umi_len_alt,
-        common_seq_len            = args.common_seq_len,
-        overlap_check_len         = args.overlap_check_len,
-        min_primer_side_len       = args.min_primer_side_len,
-        min_umi_side_len          = args.min_umi_side_len,
-        umi_filter_min_bq         = args.umi_filter_min_bq,
-        umi_filter_max_lowQ_bases = args.umi_filter_max_lowQ_bases,
-        umi_filter_max_Ns         = args.umi_filter_max_Ns,
-        check_primer_side         = args.check_primer_side,
-        trim_custom_seq_adapter   = args.to_trim_custom_adapter,
-        primer3_R1                = args.primer3_bases_R1,
-        primer3_R2                = args.primer3_bases_R2,
-        poly_tail_primer_side     = args.poly_tail_primer_side,
-        poly_tail_umi_side        = args.poly_tail_umi_side,
-        tagname_duplex            = args.tagname_duplex,
-        tagname_multimodal        = args.tagname_multimodal,
-        tagname_umi               = args.tagname_umi,
-        tagname_primer            = args.tagname_primer,
-        tagname_primer_error      = args.tagname_primer_error,
-        tag_separator             = args.tag_separator,
-        field_separator           = args.field_separator,        
-        no_tagnames               = args.no_tagnames,
-        drop_alt_seqtype          = args.drop_alt_seqtype,
-        include_common_seq_tag    = args.include_common_seq_tag
-    )
-    
+    trim_obj = helper.helper_return_qiaseq_obj(args)
     # unpack input byte string                                 
     buff_r1,buff_r2 = buffer_
     r1_lines        = buff_r1.split(b"\n")
@@ -643,7 +629,6 @@ def wrapper_func(args,queue,buffer_):
             pass
         elif i % 4 == 0: # qual
             counters.total_reads += 1
-
             r1_qual,r2_qual = line
             # have R1 and R2 ready to process now
             if args.is_r2_primer_side:
@@ -653,6 +638,10 @@ def wrapper_func(args,queue,buffer_):
                 trim_obj.r1_info = (r1_readid,r1_seq,r1_qual)
                 trim_obj.r2_info = (r2_readid,r2_seq,r2_qual)
 
+            # some error checking
+            trim_obj.check_fastq_format()
+
+            # paired-end trimming
             trim_obj.qiaseq_trim(primer_datastruct)
 
             if trim_obj.is_r1_poly_tail_trim:
@@ -929,22 +918,33 @@ def main(args):
     logger.info("\n{}\n".format("--"*10))
     logger.info("Created Primer Datastruct\n")
 
-    # check custom sequencing adapter in the first chunk of the fastq ~ 11000 reads
-    if not args.trim_custom_seq_adapter:
-        f,f2 = open_fh(r1,r2)
-        for buffers in iterate_fastq(f,f2,1):
-            assert len(buffers) == 1
-            num_reads, to_trim_custom_adapter = trim_custom_sequencing_adapter(args,buffers[0])
-            break
+    f,f2 = open_fh(r1,r2)
+    for buffers in iterate_fastq(f,f2,1,buffer_size=16*1024**2):
+        assert len(buffers) == 1
+        # check custom sequencing adapter in the first chunk of the fastq ~ 11000 reads
+        if not args.trim_custom_seq_adapter:
+            num_reads,to_trim_custom_adapter = trim_custom_sequencing_adapter(args,buffers[0])
+            logger.info("Checked first {n} reads for custom sequencing adapter.".format(n=num_reads))
+            if to_trim_custom_adapter:
+                logger.info("Custom sequencing adapter present in > 95% reads")
+            args.trim_custom_adapter = to_trim_custom_adapter
+        #else: # User can overide to force trimming of custom sequencing adapter , useful for ion reads
+
+        # check if adapter is readable on UMI side in the first chunk of the fastq
+        # NOTE: Only Multi-Modal reads will use this argument for now
+        if not args.is_umi_side_adapter_readable and args.is_multimodal:
+            num_reads,is_umi_side_adapter_readable = check_umi_side_adapter_readable(args,buffers[0])
+            logger.info("Checked first {n} reads for UMI side adapter.".format(n=num_reads))
+            if is_umi_side_adapter_readable:
+                logger.info("UMI side adapter is readable.".format(n=num_reads))
+            else:
+                logger.info("UMI side adapter is not readable.".format(n=num_reads))
+            args.is_umi_side_adapter_readable = is_umi_side_adapter_readable
+        #else: # User can override to force sequence based trimming for multi-modal
+        break
+    close_fh(f,f2)
     
-        logger.info("Checked first {n} reads for custom sequencing adapter.".format(n=num_reads))
-        if to_trim_custom_adapter:
-            logger.info("Custom sequencing adapter present in > 95% reads")
-        args.to_trim_custom_adapter = to_trim_custom_adapter
-        close_fh(f,f2)
-    else: # force trimming of custom sequencing adapter , useful for ion reads
-        args.to_trim_custom_adapter = args.trim_custom_seq_adapter
-        
+   
     logger.info("\nRunning program with args : {}\n".format(args))
 
     nchunk = 1
@@ -1006,16 +1006,27 @@ def main(args):
         total_dropped += metrics.num_no_duplex
 
     if args.is_multimodal:
+        temp_num_UMIend_B = "NA" if not args.is_umi_side_adapter_readable else \
+                            thousand_comma(metrics.num_UMIend_B)
+        temp_num_UMIend_RT = "NA" if not args.is_umi_side_adapter_readable else \
+                             thousand_comma(metrics.num_UMIend_RT)
+        temp_num_UMIend_TSO = "NA" if not args.is_umi_side_adapter_readable else \
+                              thousand_comma(metrics.num_UMIend_TSO)
+        temp_num_UMIend_alt = "NA" if not args.is_umi_side_adapter_readable else \
+                              thousand_comma(metrics.num_UMIend_alt)
+        temp_num_no_UMIend_adapter = "NA" if not args.is_umi_side_adapter_readable else \
+                                     thousand_comma(metrics.num_no_UMIend_adapter)
+        
         out_metrics.extend(
-            [thousand_comma(metrics.num_UMIend_B)   + "\tNum UMI side reads with common sequence B",
-             thousand_comma(metrics.num_UMIend_RT)  + "\tNum UMI side reads with common sequence RT",
-             thousand_comma(metrics.num_UMIend_TSO) + "\tNum UMI side reads with common sequence TSO"])
+            [temp_num_UMIend_B   + "\tNum UMI side reads with common sequence B",
+             temp_num_UMIend_RT  + "\tNum UMI side reads with common sequence RT",
+             temp_num_UMIend_TSO + "\tNum UMI side reads with common sequence TSO"])
         if args.drop_alt_seqtype:
-            out_metrics_dropped.append(thousand_comma(metrics.num_UMIend_alt) + "\tNum fragments dropped (multimodal alternative sequence type)")
+            out_metrics_dropped.append(temp_num_UMIend_alt + "\tNum fragments dropped (multimodal alternative sequence type)")
             total_dropped += metrics.num_UMIend_alt
         else:
-            out_metrics.append(thousand_comma(metrics.num_UMIend_alt) + "\tNum fragments from multumodal alternative sequence type")
-        out_metrics_dropped.append(thousand_comma(metrics.num_no_UMIend_adapter) + "\tNum fragments dropped (no common sequence)")
+            out_metrics.append(temp_num_UMIend_alt + "\tNum fragments from multumodal alternative sequence type")
+        out_metrics_dropped.append(temp_num_no_UMIend_adapter + "\tNum fragments dropped (no common sequence)")
         total_dropped += metrics.num_no_UMIend_adapter
 
     if args.seqtype == "rna":
