@@ -8,7 +8,7 @@ sys.path.append(os.path.join(
         os.path.abspath(__file__))) , "trimmer/"))
 
 from trimmer import PrimerDataStruct
-import utils
+import helper
 
 # to do :
 # 1. Need to add more test cases to all routines here
@@ -26,9 +26,9 @@ class TestQiaSeqTrimDna(unittest.TestCase):
                                                   ncpu=1,seqtype="dna",primer_col=3).primer_search_datastruct
 
         # argparse obj
-        self.args = utils.helper_return_args()
+        self.args = helper.helper_return_args()
         # trimmer obj
-        self.trimmer_obj = utils.helper_return_qiaseq_obj(self.args)
+        self.trimmer_obj = helper.helper_return_qiaseq_obj(self.args)
 
     def test_overlap_synthetic_side_check(self):
         '''

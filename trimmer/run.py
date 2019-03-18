@@ -50,8 +50,14 @@ def init_parser():
                         help = "The custom sequencing adapter used in library preperation (SPE side). Default : %(default)s")
     
     parser.add_argument("--trim-custom-seq-adapter", action = "store_true",
-                        help = "Choose this flag to trim custom sequencing adapter."\
-                        "If not selected the first ~ 40000 reads will be checked heuristically to determine whether to trim or not.")
+                        help = "Choose this flag to trim custom sequencing adapter. " \
+                        "If not selected the first ~ 20000 reads will be checked heuristically to determine whether to trim or not.")
+
+    parser.add_argument("--is-umi-side-adapter-readable", action = "store_true",
+                        help = "Choose this flag if the UMI side adapter is readable. It will disable sequence check for adapter " \
+                        "and trim fixed length UMI side sequence." \
+                        "If not selected the first ~ 20000 reads will be checked heuristically to determine whether the UMI side adapter is readable." \
+                        "Note : This option only applies to Multi-Modal reads")
     
     parser.add_argument("--tagname-primer", default = "pr",
                         help = "Tag name for Primer ID. Default : %(default)s")
@@ -111,14 +117,14 @@ def init_parser():
                         help = "Choose whether there is a polyA/T tail on the UMI side. Default : %(default)s")    
 
     parser.add_argument("--umi-filter-min-bq", default = 20, type = int,
-                        help = "Minimum Base quality below which a base in the UMI sequence is considered to be of low quality."\
+                        help = "Minimum Base quality below which a base in the UMI sequence is considered to be of low quality." \
                         "Only applicable to speRNA. Default : %(default)s")
 
     parser.add_argument("--umi-filter-max-lowQ-bases", default = 1, type = int,
-                        help = "Maximum number of lowQ bases to tolerate in the UMI region. Reads having more than this number are dropped."\
+                        help = "Maximum number of lowQ bases to tolerate in the UMI region. Reads having more than this number are dropped." \
                         "Only applicable to speRNA. Default : %(default)s")
 
-    parser.add_argument("--umi-filter-max-Ns", default = 1, type = int, help = "Tolerate these many Ns in the UMI sequence."\
+    parser.add_argument("--umi-filter-max-Ns", default = 1, type = int, help = "Tolerate these many Ns in the UMI sequence." \
                         "Reads having more than this number are dropped. Only applicable to speRNA. Default : %(default)s")
 
     parser.add_argument("--thousand-comma", action = "store_true", help = "Show integers with thousand's comma. Default : %(default)s")
