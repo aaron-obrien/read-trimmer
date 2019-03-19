@@ -428,7 +428,7 @@ class QiaSeqTrimmer(Trimmer):
         temp = primer_datastruct[0][primer][0]
         if self.seqtype == "dna":
             chrom,pos,strand,seq = temp[1]
-            primer_info = chrom+"-"+strand+"-"+pos
+            primer_info = chrom+"-"+strand+"-"+pos+"-"+str(len(seq))
         elif self.seqtype == "rna":
             pr_id = []
             # could have 2 or more primers with same sequence

@@ -68,7 +68,7 @@ def init_parser():
     parser.add_argument("--tagname-umi", default = "mi",
                         help = "Tag name for UMI sequence. Default : %(default)s")
     
-    parser.add_argument("--tagname-duplex", default = "DU",
+    parser.add_argument("--tagname-duplex", default = "Du",
                         help = "Tag name for duplex tag. Default : %(default)s")
     
     parser.add_argument("--tag-separator",default = "\t",
