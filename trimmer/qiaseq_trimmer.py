@@ -1055,7 +1055,7 @@ def main(args):
 
     out_metrics.extend(out_metrics_dropped)                                                                         
     out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tread fragments after trimming")
-    out_metrics.append("{pct_after_trim} \t% read fragments after trimming percent".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
+    out_metrics.append("{pct_after_trim} \tread fragments after trimming percent".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
     
     out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if metrics.num_r1_qual_trim_bases == 0 else \
                                                       round(float(metrics.num_r1_qual_trim_bases)/(metrics.num_r1_qual_trim),2),
