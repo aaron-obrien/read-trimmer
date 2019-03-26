@@ -981,28 +981,35 @@ def main(args):
     thousand_comma = lambda x: "{:,}".format(x) if args.thousand_comma else str(x)
 
     out_metrics = [
-        thousand_comma(metrics.total_reads) + "\tTotal read fragments",
-        thousand_comma(metrics.num_r1_primer_trimmed) + "\tNum SPE side reads with primer identified",
-        thousand_comma(metrics.num_r1_syn_trimmed) + "\tNum SPE side reads with 3' synthetic oligo trimmed",
-        thousand_comma(metrics.num_r2_primer_trimmed) + "\tNum UMI side reads with 3' synthetic oligo trimmed (including primer)",
-        thousand_comma(metrics.num_r1_r2_overlap) + "\tNum read fragments overlapping",
-        thousand_comma(metrics.num_r1_qual_trim) + "\tNum SPE side reads qual trimmed",
-        thousand_comma(metrics.num_r2_qual_trim) + "\tNum UMI side reads qual trimmed",        
-        "{qual_trim_r1}\tAvg num SPE side bases qual trimmed",
-        "{qual_trim_r2}\tAvg num UMI side bases qual trimmed",
+        thousand_comma(metrics.total_reads) + "\tread fragments total",
+        thousand_comma(metrics.num_r1_primer_trimmed) + "\tSPE side reads with primer identified",
+        thousand_comma(metrics.num_r1_syn_trimmed) + "\tSPE side reads with 3' synthetic oligo trimmed",
+        thousand_comma(metrics.num_r2_primer_trimmed) + "\tUMI side reads with 3' synthetic oligo trimmed (including primer)",
+        thousand_comma(metrics.num_r1_r2_overlap) + "\tread fragments overlapping",
+        thousand_comma(metrics.num_r1_qual_trim) + "\tSPE side reads qual trimmed",
+        thousand_comma(metrics.num_r2_qual_trim) + "\tUMI side reads qual trimmed",
+        "{qual_trim_r1}\tmean SPE side bases qual trimmed",
+        "{qual_trim_r2}\tmean UMI side bases qual trimmed",
     ]
+
+    if args.is_r2_primer_side:
+        l1 = args.min_umi_side_len
+        l2 =  args.min_primer_side_len
+    else:
+        l1 =  args.min_primer_side_len
+        l2 = args.min_umi_side_len
     out_metrics_dropped = [
-        thousand_comma(metrics.num_too_short) + "\tNum read fragments dropped too short",
-        thousand_comma(metrics.num_odd) + "\tNum read fragments dropped odd structure (usually SPE side has only primer sequence)"
+        thousand_comma(metrics.num_too_short) + "\tread fragments dropped, R1 < {l1} b.p or R2 < {l2} b.p after trimming".format(l1=l1,l2=l2),
+        thousand_comma(metrics.num_odd) + "\tread fragments dropped, odd structure (usually SPE side has only primer sequence)"
     ]
     total_dropped = metrics.num_too_short + metrics.num_odd
-    
+
     if args.is_duplex:
         out_metrics.extend(
-            [thousand_comma(metrics.num_CC) + "\tNum CC reads",
-             thousand_comma(metrics.num_TT) + "\tNum TT reads",
-             thousand_comma(metrics.num_NN) + "\tNum NN reads"])
-        out_metrics_dropped.append(thousand_comma(metrics.num_no_duplex) + "\tNum read fragments dropped (no duplex adapter)")
+            [thousand_comma(metrics.num_CC) + "\tread fragments with duplex tag CC",
+             thousand_comma(metrics.num_TT) + "\tread fragments with duplex tag TT",
+             thousand_comma(metrics.num_NN) + "\tread fragments with duplex tag NN"])
+        out_metrics_dropped.append(thousand_comma(metrics.num_no_duplex) + "\tread fragments dropped, no duplex adapter")
         total_dropped += metrics.num_no_duplex
 
     if args.is_multimodal:
@@ -1018,37 +1025,37 @@ def main(args):
                                      thousand_comma(metrics.num_no_UMIend_adapter)
         
         out_metrics.extend(
-            [temp_num_UMIend_B   + "\tNum UMI side reads with common sequence B",
-             temp_num_UMIend_RT  + "\tNum UMI side reads with common sequence RT",
-             temp_num_UMIend_TSO + "\tNum UMI side reads with common sequence TSO"])
+            [temp_num_UMIend_B   + "\tUMI side reads with common sequence B",
+             temp_num_UMIend_RT  + "\tUMI side reads with common sequence RT",
+             temp_num_UMIend_TSO + "\tUMI side reads with common sequence TSO"])
         if args.drop_alt_seqtype:
-            out_metrics_dropped.append(temp_num_UMIend_alt + "\tNum fragments dropped (multimodal alternative sequence type)")
+            out_metrics_dropped.append(temp_num_UMIend_alt + "\tread fragments dropped, multimodal alternative sequence type")
             total_dropped += metrics.num_UMIend_alt
         else:
-            out_metrics.append(temp_num_UMIend_alt + "\tNum fragments from multumodal alternative sequence type")
-        out_metrics_dropped.append(temp_num_no_UMIend_adapter + "\tNum fragments dropped (no common sequence)")
+            out_metrics.append(temp_num_UMIend_alt + "\tread fragments from multimodal alternative sequence type")
+        out_metrics_dropped.append(temp_num_no_UMIend_adapter + "\tread fragments dropped, no common sequence")
         total_dropped += metrics.num_no_UMIend_adapter
 
     if args.seqtype == "rna":
         if args.poly_tail_primer_side != "none":
             out_metrics.extend(
-                ["{p1_trim}\tAvg num bases {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side,
+                ["{p1_trim}\tmean bases {p1} trimmed, primer side".format(p1 = args.poly_tail_primer_side,
                                                                             p1_trim = 0 if metrics.num_poly_trim_bases_primer == 0 else \
                                                                             round(float(metrics.num_poly_trim_bases_primer)/metrics.num_poly_trim_primer,2)),
-                 thousand_comma(metrics.num_poly_trim_primer) + "\tNum reads {p1} trimmed Primer side".format(p1 = args.poly_tail_primer_side)])
+                 thousand_comma(metrics.num_poly_trim_primer) + "\treads {p1} trimmed, primer side".format(p1 = args.poly_tail_primer_side)])
         if args.poly_tail_umi_side != "none":
             out_metrics.extend(
-                ["{p2_trim}\tAvg num bases {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side,
+                ["{p2_trim}\tmean bases {p2} trimmed, UMI side".format(p2 = args.poly_tail_umi_side,
                                                                          p2_trim = 0 if metrics.num_poly_trim_bases_umi == 0 else \
                                                                          round(float(metrics.num_poly_trim_bases_umi)/metrics.num_poly_trim_umi,2)),
-                 thousand_comma(metrics.num_poly_trim_umi) + "\tNum reads {p2} trimmed UMI side".format(p2 = args.poly_tail_umi_side)])
+                 thousand_comma(metrics.num_poly_trim_umi) + "\treads {p2} trimmed, UMI side".format(p2 = args.poly_tail_umi_side)])
 
-        out_metrics_dropped.append(thousand_comma(metrics.num_bad_umi) + "\tNum read fragments dropped bad UMI")
+        out_metrics_dropped.append(thousand_comma(metrics.num_bad_umi) + "\tread fragments dropped, bad UMI")
         total_dropped += metrics.num_bad_umi
 
     out_metrics.extend(out_metrics_dropped)                                                                         
-    out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tNum read fragments after trimming")
-    out_metrics.append("{pct_after_trim} \tPct read fragments after trimming".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
+    out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tread fragments after trimming")
+    out_metrics.append("{pct_after_trim} \tread fragments after trimming percent".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
     
     out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if metrics.num_r1_qual_trim_bases == 0 else \
                                                       round(float(metrics.num_r1_qual_trim_bases)/(metrics.num_r1_qual_trim),2),
