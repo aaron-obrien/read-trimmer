@@ -23,8 +23,8 @@ class PrimerDataStruct(object):
         self.seqtype = kwargs["seqtype"]
         self.primer_col = kwargs["primer_col"]
 
-        self.save_cache = True if not "save_cache" in kwargs else True
-        self.load_cache = True if not "load_cache" in kwargs else True
+        self.save_cache = False if not "save_cache" in kwargs else self.save_cache
+        self.load_cache = False if not "load_cache" in kwargs else self.load_cache
 
     def _pairwise_align(self,idx):
         ''' Pairwise align two primers
@@ -122,8 +122,9 @@ class PrimerDataStruct(object):
         self._cluster_primer_seqs()
         self._create_primer_search_datastruct()
         if self.save_cache:
-            with open(self.primer_file+".index.cache","wb") as cache:
+            with open(self.primer_file+".index.cache.temp","wb") as cache:
                 pickle.dump((self._primer_info,self._primer_kmers),cache)
+            
         return (self._primer_info,self._primer_kmers)
 
 class Trimmer(object):
@@ -168,10 +169,11 @@ class Trimmer(object):
         # other constants
         self._revcomp_table             = bytes.maketrans(b"ACTG", b"TGAC")
         self._padding                   = 5
-        self._poly_tail_motif = {
-            "polyA" : re.compile(b"^([ACGTN]*?[CGTN])([A]{8,}[ACGNT]*$)"),
-            "polyT" : re.compile(b"^([ACGTN]*?[CGAN])([T]{8,}[ACGNT]*$)")
-        }        
+        self._poly_type_motif = {
+            "polyA"        : re.compile(b"^([ACGTN]*?[CGTN])([A]{8,}[ACGNT]*$)"),
+            "polyT"        : re.compile(b"^([ACGTN]*?[CGAN])([T]{8,}[ACGNT]*$)"),
+            "polyT_5prime" : re.compile(b"^([T]{5,})([ACGTN]*$)")
+        }
     # kmer size
     @property
     def k(self):
@@ -359,15 +361,15 @@ class Trimmer(object):
         '''
         return seq.translate(self._revcomp_table)[::-1]
 
-    def poly_trim(self,seq,tail):
-        ''' Return start pos of polyA/T tail , if present
+    def poly_trim(self,seq, poly_type):
+        ''' Return start pos of polyA/T tail/5'end , if present
         returns -1 if not found
 
         :param bytes seq: The read sequence to trim
         :rtype int
         :returns the polyA start position
         '''
-        match = self._poly_tail_motif[tail].match(seq)
+        match = self._poly_type_motif[poly_type].match(seq)
         if match: # found polyA
             return match.start(2)
         else:

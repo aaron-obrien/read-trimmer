@@ -68,7 +68,59 @@ class TestQiaSeqTrimDna(unittest.TestCase):
         ''' Some checks done as part of the test_overlap_primer_side_check below. Need seperate tests here.
         '''
         pass
-        
+
+    def test_multimodal_polyT_5prime(self):
+        ''' Check 5' polyT trim of UMI side reads
+        '''
+        temp_args                            = self.args
+        temp_args.is_multimodal              = True
+        temp_args.trim_polyT_5prime_umi_side = True
+        temp_trimmer_obj = helper.helper_return_qiaseq_obj(temp_args)
+
+        temp_trimmer_obj._is_r2_polyT_5prime_trim = False
+        r2_seq = b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTTTTTTTCTTTTTTTCCTAACACGTGCGCTCCTGCTCCACCCCCCCGGGCCGGCGGGCGGGACGGGCCGGTGGGGCGCCCTTGGGGGGCTTGGGAGGCCCCGGGGTCCCACCTC"
+        temp_trimmer_obj.synthetic_oligo_len = 10 + len(b"ACGTTTTTTTTTTTTTTTTTTVN")
+        temp_trimmer_obj._multimodal_adapter_name = b"RT"
+        temp_trimmer_obj._r2_polyT_5prime_trim_wrap(r2_seq)
+        self.assertEqual(temp_trimmer_obj._is_r2_polyT_5prime_trim, True)
+        self.assertEqual(temp_trimmer_obj.synthetic_oligo_len, len(b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTTTTTTT"))
+        self.assertEqual(temp_trimmer_obj.r2_polyT_5prime_trim_len, len(b"TTTTTTTTTT"))
+
+        temp_trimmer_obj._is_r2_polyT_5prime_trim = False
+        temp_trimmer_obj.synthetic_oligo_len = 10 + len(b"ACGTTTTTTTTTTTTTTTTTTVN")
+        temp_trimmer_obj._multimodal_adapter_name = b"TSO"
+        temp_trimmer_obj._r2_polyT_5prime_trim_wrap(r2_seq)
+        self.assertEqual(temp_trimmer_obj._is_r2_polyT_5prime_trim, False)
+
+        # only 4 polyTs after adapter - should not trim this
+        temp_trimmer_obj._is_r2_polyT_5prime_trim = False
+        temp_trimmer_obj.synthetic_oligo_len = 10 + len(b"ACGTTTTTTTTTTTTTTTTTTVN")
+        temp_trimmer_obj._multimodal_adapter_name = b"RT"
+        r2_seq = b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTCTTTTTTTCCTAACACGTGCGCTCCTGCTCCACCCCCCCGGGCCGGCGGGCGGGACGGGCCGGTGGGGCGCCCTTGGGGGGCTTGGGAGGCCCCGGGGTCCCACCTC"
+        temp_trimmer_obj._r2_polyT_5prime_trim_wrap(r2_seq)
+        self.assertEqual(temp_trimmer_obj._is_r2_polyT_5prime_trim, False)
+
+        # 5 Ts - should trim this
+        temp_trimmer_obj._is_r2_polyT_5prime_trim = False
+        temp_trimmer_obj.synthetic_oligo_len = 10 + len(b"ACGTTTTTTTTTTTTTTTTTTVN")
+        temp_trimmer_obj._multimodal_adapter_name = b"RT"
+        r2_seq = b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTTCTTTTTTTCCTAACACGTGCGCTCCTGCTCCACCCCCCCGGGCCGGCGGGCGGGACGGGCCGGTGGGGCGCCCTTGGGGGGCTTGGGAGGCCCCGGGGTCCCACCTC"
+        temp_trimmer_obj._r2_polyT_5prime_trim_wrap(r2_seq)
+        self.assertEqual(temp_trimmer_obj._is_r2_polyT_5prime_trim, True)
+        self.assertEqual(temp_trimmer_obj.synthetic_oligo_len, len(b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTT"))
+        self.assertEqual(temp_trimmer_obj.r2_polyT_5prime_trim_len, len(b"TTTTT"))
+
+        # all Ts after adapter - should trim all the Read
+        temp_trimmer_obj._is_r2_polyT_5prime_trim = False
+        temp_trimmer_obj.synthetic_oligo_len = 10 + len(b"ACGTTTTTTTTTTTTTTTTTTVN")
+        temp_trimmer_obj._multimodal_adapter_name = b"RT"
+        r2_seq = b"GTTAATCGCCACGTTTTTTTTTTTTTTTTTTGTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+        temp_trimmer_obj._r2_polyT_5prime_trim_wrap(r2_seq)
+        self.assertEqual(temp_trimmer_obj._is_r2_polyT_5prime_trim, True)
+        self.assertEqual(temp_trimmer_obj.synthetic_oligo_len, len(r2_seq))
+        self.assertEqual(temp_trimmer_obj.r2_polyT_5prime_trim_len, len(b"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"))
+
+
     def test_overlap_primer_side_check(self):
         '''
         '''

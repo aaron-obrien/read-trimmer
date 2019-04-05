@@ -108,6 +108,9 @@ def init_parser():
     parser.add_argument("--max-mismatch-rate-primer", default = 0.12,
                         type = float, help = "Mismatch rate to tolerate for primer identification. Default : %(default)s")
 
+    parser.add_argument("--trim-polyT-5prime-umi-side", action = "store_true",
+                        help = "Use this flag to specify if polyT bases need to be trimmed at the 5' end of the UMI side reads. This option will only be used for Multi-Modal reads. Default : %(default)s")
+
     parser.add_argument("--poly-tail-primer-side", default = "none", const = "none",
                         nargs = "?", choices = ["polyA","polyT","none"],
                         help = "Choose whether there is a polyA/T tail on the primer side. Default : %(default)s")
