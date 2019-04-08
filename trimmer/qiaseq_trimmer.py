@@ -685,19 +685,24 @@ def wrapper_func(args,queue,buffer_):
                 continue
             elif trim_obj.is_bad_umi:
                 assert args.seqtype == "rna","UMI filter only applicable for speRNA reads!"
-                counters.num_bad_umi+=1
+                counters.num_bad_umi += 1
                 i += 1
                 continue
             
+            if args.drop_no_primer_reads and not trim_obj.is_r1_primer_trimmed: # drop no primer reads, if needed
+                counters.num_no_primer += 1
+                i += 1
+                continue
             if args.is_duplex and not trim_obj.is_duplex_adapter_present:
                 counters.num_no_duplex += 1
                 i += 1
                 continue
-            
             if args.is_multimodal and not trim_obj.is_multimodal_adapter_present:
                 counters.num_no_UMIend_adapter += 1
                 i += 1
                 continue
+
+
 
             if trim_obj.is_r1_qual_trim:
                 counters.num_r1_qual_trim_bases += trim_obj.r1_qual_trim_len
@@ -776,17 +781,18 @@ def init_metrics():
     metrics.num_too_short         = 0
     metrics.num_odd               = 0
     metrics.num_bad_umi           = 0
-    metrics.num_no_duplex         = 0
     metrics.num_no_UMIend_adapter = 0
     metrics.num_UMIend_alt        = 0
+    metrics.num_no_primer         = 0
     metrics.num_r1_primer_trimmed = 0
     metrics.num_r1_syn_trimmed    = 0
     metrics.num_r2_primer_trimmed = 0
     metrics.num_r1_r2_overlap     = 0
     # duplex specific
-    metrics.num_CC = 0
-    metrics.num_TT = 0
-    metrics.num_NN = 0
+    metrics.num_no_duplex = 0
+    metrics.num_CC        = 0
+    metrics.num_TT        = 0
+    metrics.num_NN        = 0
     # multimodal specific
     metrics.num_UMIend_B   = 0
     metrics.num_UMIend_RT  = 0
@@ -1030,6 +1036,10 @@ def main(args):
     ]
     total_dropped = metrics.num_too_short + metrics.num_odd
 
+    if args.drop_no_primer_reads: # drop reads with no primer found on R1
+        out_metrics_dropped.append(thousand_comma(metrics.num_no_primer) + "\tread fragments dropped, no primer match")
+        total_dropped += metrics.num_no_primer
+
     if args.is_duplex:
         out_metrics.extend(
             [thousand_comma(metrics.num_CC) + "\tread fragments with duplex tag CC",
@@ -1086,10 +1096,10 @@ def main(args):
         out_metrics_dropped.append(thousand_comma(metrics.num_bad_umi) + "\tread fragments dropped, bad UMI")
         total_dropped += metrics.num_bad_umi
 
-    out_metrics.extend(out_metrics_dropped)                                                                         
+    out_metrics.extend(out_metrics_dropped)
     out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tread fragments after trimming")
     out_metrics.append("{pct_after_trim} \tread fragments after trimming percent".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
-    
+
     out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if metrics.num_r1_qual_trim_bases == 0 else \
                                                       round(float(metrics.num_r1_qual_trim_bases)/(metrics.num_r1_qual_trim),2),
                                                       qual_trim_r2 = 0 if metrics.num_r2_qual_trim_bases == 0 else \

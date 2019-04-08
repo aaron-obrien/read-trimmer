@@ -53,6 +53,9 @@ def init_parser():
                         help = "Choose this flag to trim custom sequencing adapter. " \
                         "If not selected the first ~ 20000 reads will be checked heuristically to determine whether to trim or not.")
 
+    parser.add_argument("--drop-no-primer-reads", action = "store_true",
+                        help = "Use this flag to drop reads with no primer. Otherwise reads with no primers are reported with a -1 tag for the primer.")
+
     parser.add_argument("--is-umi-side-adapter-readable", action = "store_true",
                         help = "Choose this flag if the UMI side adapter is readable. It will disable sequence check for adapter " \
                         "and trim fixed length UMI side sequence." \
