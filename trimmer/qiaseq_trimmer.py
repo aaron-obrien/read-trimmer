@@ -170,12 +170,23 @@ class QiaSeqTrimmer(Trimmer):
                 best_subseq    = subseq_r2
         if best_score <= 0.18:
             end_pos = best_alignment["locations"][-1][1] # multiple alignments with same scores can be there , return end pos of last alignment(furthest end pos)
-            duplex_tag = b"CC" if best_subseq[end_pos - 13:end_pos - 9].find(b"CC") != -1 \
-                    else b"TT" if best_subseq[end_pos - 13:end_pos - 9].find(b"TT") != -1 \
-                    else b"NN"
-            return (end_pos,duplex_tag)
+
+            if len(best_adapter) == len(self._duplex_adapters[-1]): # check if it is the smaller adapter
+                subseq_tag_search =  best_subseq[end_pos - 9:end_pos - 4]
+            else:
+                subseq_tag_search =  best_subseq[end_pos - 13:end_pos - 9]
+            # subseq_tag_search gets the AYYA sequence region
+
+            if subseq_tag_search == 'CCTT' or subseq_tag_search == 'TTCC': # these are abiguous
+                end_pos = -1
+                duplex_tag = b"NN"
+            else:
+                duplex_tag = b"CC" if subseq_tag_search.find(b"CC") != -1 \
+                             else b"TT" if subseq_tag_search.find(b"TT") != -1 \
+                                  else b"NN"
+            return (end_pos, duplex_tag)
         else:
-            return (-1,"-1")
+            return (-1, b"-1")
         
     # multimodal specific vars
     @property
@@ -842,7 +853,7 @@ def aggregator_and_writer(queue,f_out_r1,f2_out_r2,return_queue):
             logger.info("Processed : {n} reads".format(n=metrics.total_reads))
 
             
-def iterate_fastq(f,f2,ncpu,buffer_size=2*1024**2):
+def iterate_fastq(f,f2,ncpu,buffer_size=8*1024**2):
     ''' Copied from cutadapt, 
     added logic to yield a list of buffers equal to the number of CPUs
     :param file_handle f:  R1 fastq
