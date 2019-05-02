@@ -81,9 +81,9 @@ class QiaSeqTrimmer(Trimmer):
         self.is_phased_adapters = kwargs["is_phased_adapters"]
         if self.is_phased_adapters:
             self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT",b"GTTCTGAGCGAYYATAGGAGTCCT",
-                                     b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT"]
+                                     b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT", "GAGCGAYYATAGGAT"]
         else:
-            self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT"]
+            self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT", "GAGCGAYYATAGGAT"]
             
         # some multimodal specific params
         self.is_umi_side_adapter_readable = kwargs["is_umi_side_adapter_readable"] # move this out to the trimmer class if other products are using it.
