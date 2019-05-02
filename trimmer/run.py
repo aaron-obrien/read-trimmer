@@ -53,6 +53,9 @@ def init_parser():
                         help = "Choose this flag to trim custom sequencing adapter. " \
                         "If not selected the first ~ 20000 reads will be checked heuristically to determine whether to trim or not.")
 
+    parser.add_argument("--drop-no-primer-reads", action = "store_true",
+                        help = "Use this flag to drop reads with no primer. Otherwise reads with no primers are reported with a -1 tag for the primer.")
+
     parser.add_argument("--is-umi-side-adapter-readable", action = "store_true",
                         help = "Choose this flag if the UMI side adapter is readable. It will disable sequence check for adapter " \
                         "and trim fixed length UMI side sequence." \
@@ -107,6 +110,9 @@ def init_parser():
     
     parser.add_argument("--max-mismatch-rate-primer", default = 0.12,
                         type = float, help = "Mismatch rate to tolerate for primer identification. Default : %(default)s")
+
+    parser.add_argument("--trim-polyT-5prime-umi-side", action = "store_true",
+                        help = "Use this flag to specify if polyT bases need to be trimmed at the 5' end of the UMI side reads. This option will only be used for Multi-Modal reads. Default : %(default)s")
 
     parser.add_argument("--poly-tail-primer-side", default = "none", const = "none",
                         nargs = "?", choices = ["polyA","polyT","none"],

@@ -48,6 +48,7 @@ def helper_return_qiaseq_obj(args):
                          trim_custom_seq_adapter      =   args.trim_custom_seq_adapter,
                          primer3_R1                   =   args.primer3_bases_R1,
                          primer3_R2                   =   args.primer3_bases_R2,
+                         trim_polyT_5prime_umi_side   =   args.trim_polyT_5prime_umi_side,
                          poly_tail_primer_side        =   args.poly_tail_primer_side,
                          poly_tail_umi_side           =   args.poly_tail_umi_side,
                          tagname_umi                  =   args.tagname_umi,
@@ -89,6 +90,7 @@ class QiaSeqTrimmer(Trimmer):
         self.tagname_multimodal = kwargs["tagname_multimodal"]
         self.is_multimodal = kwargs["is_multimodal"]
         self._multimodal_UMIend_adapters = [(b"ATTGGAGTCCT", "dna", b"B"), (b"ACGTTTTTTTTTTTTTTTTTTVN", "rna", b"RT"), (b"ATCTGCGGG", "rna", b"TSO")]
+        self.trim_polyT_5prime_umi_side = kwargs["trim_polyT_5prime_umi_side"]
         if self.umi_len_alt is None:
             self.umi_len_alt = self.umi_len
 
@@ -185,6 +187,10 @@ class QiaSeqTrimmer(Trimmer):
     @property
     def is_multimodal_alt_seq(self):
         return self._is_multimodal_alt_seq
+    @property
+    def is_r2_polyT_5prime_trim(self):
+        return self._is_r2_polyT_5prime_trim
+
     
     def _id_multimodal_adapter_name(self,r2_seq):
         ''' Identify multimodal adapter sequence on UMI end
@@ -282,6 +288,16 @@ class QiaSeqTrimmer(Trimmer):
                 
         if counter < self.umi_filter_max_lowQ_bases:
             return False
+
+    def _r2_polyT_5prime_trim_wrap(self, r2_seq):
+        ''' Trim 5' polyT trim
+        '''
+        if self._multimodal_adapter_name == b"RT":
+            r2_polyT_5prime_trim_end = self.poly_trim(r2_seq[self.synthetic_oligo_len:], 'polyT_5prime')
+            if r2_polyT_5prime_trim_end != -1:
+                self.r2_polyT_5prime_trim_len = r2_polyT_5prime_trim_end
+                self._is_r2_polyT_5prime_trim = True
+                self.synthetic_oligo_len += self.r2_polyT_5prime_trim_len
         
     def qiaseq_trim(self,primer_datastruct):
         """ Trim QiaSeq DNA/RNA reads
@@ -300,7 +316,9 @@ class QiaSeqTrimmer(Trimmer):
         
         self._is_r1_poly_tail_trim      = False # only used for RNA
         self._is_r2_poly_tail_trim      = False # only used for RNA
-        
+
+        self._is_r2_polyT_5prime_trim   = False # only used for multi-modal reads
+
         self._is_duplex_adapter_present     = False
         self._is_multimodal_adapter_present = False
         self._is_multimodal_alt_seq         = False
@@ -339,7 +357,7 @@ class QiaSeqTrimmer(Trimmer):
         if self.is_multimodal:
             if self.is_umi_side_adapter_readable:
                 adapter_end_pos,self._multimodal_adapter_name,umi_len,self._is_multimodal_alt_seq = self._id_multimodal_adapter_name(r2_seq)
-                if adapter_end_pos == -1: # drop read
+                if adapter_end_pos == -1:
                     return
                 # update synthetic oligo len
                 self._is_multimodal_adapter_present = True
@@ -351,6 +369,9 @@ class QiaSeqTrimmer(Trimmer):
                 longest_adapter_len = len(self._multimodal_UMIend_adapters[1][0]) if self.seqtype == "rna" \
                                       else len(self._multimodal_UMIend_adapters[0][0])
                 self.synthetic_oligo_len = umi_len + longest_adapter_len
+            # trim and book keep 5' polyT trim on R2
+            if self.trim_polyT_5prime_umi_side:
+                self._r2_polyT_5prime_trim_wrap(r2_seq)
 
         # get umi
         synthetic_oligo_len = self.synthetic_oligo_len        
@@ -361,7 +382,7 @@ class QiaSeqTrimmer(Trimmer):
             umi = r2_seq[1:umi_len+1]
             umi_qual = r2_qual[1:umi_len+1]
             self.synthetic_oligo_len += 1
-            
+
         if self.seqtype == "rna":
             self._is_bad_umi = self._umi_filter_rna(umi,umi_qual)            
             if self._is_bad_umi: # drop read
@@ -650,7 +671,10 @@ def wrapper_func(args,queue,buffer_):
             if trim_obj.is_r2_poly_tail_trim:
                 counters.num_poly_trim_bases_umi += trim_obj.r2_poly_tail_trim_len
                 counters.num_poly_trim_umi += 1
-                
+            if trim_obj.is_r2_polyT_5prime_trim:
+                counters.num_polyT_5prime_trim_bases_umi += trim_obj.r2_polyT_5prime_trim_len
+                counters.num_polyT_5prime_trim_umi += 1
+
             if trim_obj.is_too_short:
                 counters.num_too_short += 1
                 i += 1
@@ -661,19 +685,24 @@ def wrapper_func(args,queue,buffer_):
                 continue
             elif trim_obj.is_bad_umi:
                 assert args.seqtype == "rna","UMI filter only applicable for speRNA reads!"
-                counters.num_bad_umi+=1
+                counters.num_bad_umi += 1
                 i += 1
                 continue
             
+            if args.drop_no_primer_reads and not trim_obj.is_r1_primer_trimmed: # drop no primer reads, if needed
+                counters.num_no_primer += 1
+                i += 1
+                continue
             if args.is_duplex and not trim_obj.is_duplex_adapter_present:
                 counters.num_no_duplex += 1
                 i += 1
                 continue
-            
             if args.is_multimodal and not trim_obj.is_multimodal_adapter_present:
                 counters.num_no_UMIend_adapter += 1
                 i += 1
                 continue
+
+
 
             if trim_obj.is_r1_qual_trim:
                 counters.num_r1_qual_trim_bases += trim_obj.r1_qual_trim_len
@@ -752,21 +781,24 @@ def init_metrics():
     metrics.num_too_short         = 0
     metrics.num_odd               = 0
     metrics.num_bad_umi           = 0
-    metrics.num_no_duplex         = 0
     metrics.num_no_UMIend_adapter = 0
     metrics.num_UMIend_alt        = 0
+    metrics.num_no_primer         = 0
     metrics.num_r1_primer_trimmed = 0
     metrics.num_r1_syn_trimmed    = 0
     metrics.num_r2_primer_trimmed = 0
     metrics.num_r1_r2_overlap     = 0
     # duplex specific
-    metrics.num_CC = 0
-    metrics.num_TT = 0
-    metrics.num_NN = 0
+    metrics.num_no_duplex = 0
+    metrics.num_CC        = 0
+    metrics.num_TT        = 0
+    metrics.num_NN        = 0
     # multimodal specific
     metrics.num_UMIend_B   = 0
     metrics.num_UMIend_RT  = 0
     metrics.num_UMIend_TSO = 0
+    metrics.num_polyT_5prime_trim_bases_umi = 0
+    metrics.num_polyT_5prime_trim_umi       = 0
     # quality trimming
     metrics.num_r1_qual_trim_bases = 0
     metrics.num_r2_qual_trim_bases = 0
@@ -1004,6 +1036,10 @@ def main(args):
     ]
     total_dropped = metrics.num_too_short + metrics.num_odd
 
+    if args.drop_no_primer_reads: # drop reads with no primer found on R1
+        out_metrics_dropped.append(thousand_comma(metrics.num_no_primer) + "\tread fragments dropped, no primer match")
+        total_dropped += metrics.num_no_primer
+
     if args.is_duplex:
         out_metrics.extend(
             [thousand_comma(metrics.num_CC) + "\tread fragments with duplex tag CC",
@@ -1033,6 +1069,13 @@ def main(args):
             total_dropped += metrics.num_UMIend_alt
         else:
             out_metrics.append(temp_num_UMIend_alt + "\tread fragments from multimodal alternative sequence type")
+        if args.trim_polyT_5prime_umi_side:
+            out_metrics.extend(
+                [
+                    "{p1_trim}\tmean bases polyT 5' end trimmed, umi side".format(p1_trim = 0 if metrics.num_polyT_5prime_trim_bases_umi == 0 else \
+                                                                                  round(float(metrics.num_polyT_5prime_trim_bases_umi)/metrics.num_polyT_5prime_trim_umi,2)),
+                    thousand_comma(metrics.num_polyT_5prime_trim_umi) + "\treads polyT 5' end trimmed, umi side"
+                ])
         out_metrics_dropped.append(temp_num_no_UMIend_adapter + "\tread fragments dropped, no common sequence")
         total_dropped += metrics.num_no_UMIend_adapter
 
@@ -1053,10 +1096,10 @@ def main(args):
         out_metrics_dropped.append(thousand_comma(metrics.num_bad_umi) + "\tread fragments dropped, bad UMI")
         total_dropped += metrics.num_bad_umi
 
-    out_metrics.extend(out_metrics_dropped)                                                                         
+    out_metrics.extend(out_metrics_dropped)
     out_metrics.append(thousand_comma(metrics.num_after_trim) + "\tread fragments after trimming")
     out_metrics.append("{pct_after_trim} \tread fragments after trimming percent".format(pct_after_trim = round(100*metrics.num_after_trim/metrics.total_reads, 2) if metrics.total_reads else 0.00))
-    
+
     out_metrics_lines = "\n".join(out_metrics).format(qual_trim_r1 = 0 if metrics.num_r1_qual_trim_bases == 0 else \
                                                       round(float(metrics.num_r1_qual_trim_bases)/(metrics.num_r1_qual_trim),2),
                                                       qual_trim_r2 = 0 if metrics.num_r2_qual_trim_bases == 0 else \
