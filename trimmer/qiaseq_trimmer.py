@@ -970,7 +970,7 @@ def main(args):
             logger.info("Checked first {n} reads for custom sequencing adapter.".format(n=num_reads))
             if to_trim_custom_adapter:
                 logger.info("Custom sequencing adapter present in > 95% reads")
-            args.trim_custom_adapter = to_trim_custom_adapter
+            args.trim_custom_seq_adapter = to_trim_custom_adapter
         #else: # User can overide to force trimming of custom sequencing adapter , useful for ion reads
 
         # check if adapter is readable on UMI side in the first chunk of the fastq
