@@ -846,13 +846,15 @@ def aggregator_and_writer(queue,f_out_r1,f2_out_r2,return_queue):
                 metrics.__dict__[metric] += val
 
             # write to disk
-            f_out_r1.write(trimmed_r1_lines)
-            f_out_r1.write(b"\n")
-            f2_out_r2.write(trimmed_r2_lines)
-            f2_out_r2.write(b"\n")
+            if trimmed_r1_lines == b"" or trimmed_r2_lines == b"": # No Reads to write to trimmed FastQ in this batch 
+                assert trimmed_r2_lines == trimmed_r2_lines, "Error in writing fastqs"
+            else:           
+                f_out_r1.write(trimmed_r1_lines)
+                f_out_r1.write(b"\n")
+                f2_out_r2.write(trimmed_r2_lines)
+                f2_out_r2.write(b"\n")
             logger.info("Processed : {n} reads".format(n=metrics.total_reads))
 
-            
 def iterate_fastq(f,f2,ncpu,buffer_size=8*1024**2):
     ''' Copied from cutadapt, 
     added logic to yield a list of buffers equal to the number of CPUs
