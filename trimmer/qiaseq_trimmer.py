@@ -1,3 +1,4 @@
+import collections
 import functools
 import gzip
 import logging
@@ -79,12 +80,25 @@ class QiaSeqTrimmer(Trimmer):
         self.tagname_duplex     = kwargs["tagname_duplex"]
         self.is_duplex          = kwargs["is_duplex"]
         self.is_phased_adapters = kwargs["is_phased_adapters"]
-        if self.is_phased_adapters:
-            self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT",b"GTTCTGAGCGAYYATAGGAGTCCT",
-                                     b"CGTTCTGAGCGAYYATAGGAGTCCT",b"ACGTTCTGAGCGAYYATAGGAGTCCT", "GAGCGAYYATAGGAT"]
+        DuplexAdapter = collections.namedtuple(field_names=("seq", "offset_tag", "name"), typename="DuplexAdapter")
+        if self.is_phased_adapters:      # offset_tag gets the AYYA part of the adapter so the duplex tag can be identified; i.e. duplex_adapter[x:y] will get AYYA where (x,y) is the offset
+            self._duplex_adapters = (
+                DuplexAdapter(   b"TTCTGAGCGAYYATAGGAGTCCT", (9,13),  b"00-10-11"),
+                DuplexAdapter(  b"GTTCTGAGCGAYYATAGGAGTCCT", (10,14), b"00-11-11"),
+                DuplexAdapter( b"CGTTCTGAGCGAYYATAGGAGTCCT", (11,15), b"00-12-11"),
+                DuplexAdapter(b"ACGTTCTGAGCGAYYATAGGAGTCCT", (12,16), b"00-13-11"),
+
+                DuplexAdapter(    b"GCGAYYATAGGAT",     (3,7),  b"69-4-6"),
+                DuplexAdapter(   b"AGCGAYYATAGGAT",     (4,8),  b"69-5-6"),
+                DuplexAdapter(  b"GAGCGAYYATAGGAT",     (5,9),  b"69-6-6"),
+                DuplexAdapter( b"TGAGCGAYYATAGGAGTCCT", (6,10), b"69-7-6"),
+                DuplexAdapter(b"CTGAGCGAYYATAGGAGTCCT", (7,11), b"69-8-6"))
+
         else:
-            self._duplex_adapters = [b"TTCTGAGCGAYYATAGGAGTCCT", "GAGCGAYYATAGGAT"]
-            
+            self._duplex_adapters = (
+                DuplexAdapter(b"TTCTGAGCGAYYATAGGAGTCCT", (9,13), b"00-11-11"),
+                DuplexAdapter(    b"GAGCGAYYATAGGAT", (5,9), b"69-6-6"))
+
         # some multimodal specific params
         self.is_umi_side_adapter_readable = kwargs["is_umi_side_adapter_readable"] # move this out to the trimmer class if other products are using it.
         self.tagname_multimodal = kwargs["tagname_multimodal"]
@@ -139,6 +153,9 @@ class QiaSeqTrimmer(Trimmer):
     @property
     def duplex_tag(self):
         return self._duplex_tag
+    @property
+    def duplex_adapter_name(self):
+        return self._duplex_adapter_name
 
     def _id_duplex_tag(self,r2_seq):
         ''' Identify duplex tag
@@ -150,43 +167,41 @@ class QiaSeqTrimmer(Trimmer):
         best_editdist = None        
         start_pos = self.umi_len + 1 if r2_seq[0] == b"N" else self.umi_len
         for a in self._duplex_adapters:
-            subseq_r2 = r2_seq[start_pos:start_pos+len(a)+3]            
-            align = edlib.align(a,subseq_r2,mode="SHW",
-                                   additionalEqualities=[("Y", "C"), ("Y", "T")]) # prefix mode
+            a_seq     = a.seq
+            a_offset  = a.offset_tag
+            a_name    = a.name
+
+            subseq_r2 = r2_seq[start_pos:start_pos+len(a_seq)+3]
+            align = edlib.align(a_seq,subseq_r2,mode="SHW",
+                                additionalEqualities=[("Y", "C"), ("Y", "T")]) # prefix mode
             editdist = align["editDistance"]
-            score    = float(editdist)/len(a)
-            if editdist == 0:
+            score    = float(editdist)/len(a_seq)
+            if best_editdist is None or score <= best_score:
+                if best_editdist is not None:
+                    if score == best_score and len(best_adapter.seq) > len(a_seq): # keep the longest adapter
+                        continue
                 best_alignment = align
                 best_editdist  = editdist
                 best_score     = score
                 best_adapter   = a
-                best_subseq    = subseq_r2
-                break
-            elif best_editdist == None or score < best_score:
-                best_alignment = align
-                best_editdist  = editdist
-                best_score     = score
-                best_adapter   = a
-                best_subseq    = subseq_r2
+
         if best_score <= 0.18:
             end_pos = best_alignment["locations"][-1][1] # multiple alignments with same scores can be there , return end pos of last alignment(furthest end pos)
 
-            if len(best_adapter) == len(self._duplex_adapters[-1]): # check if it is the smaller adapter
-                subseq_tag_search =  best_subseq[end_pos - 9:end_pos - 4]
-            else:
-                subseq_tag_search =  best_subseq[end_pos - 13:end_pos - 9]
+            x,y = best_adapter.offset_tag
+            subseq_r2 = r2_seq[start_pos:start_pos+len(best_adapter.seq)]
+            subseq_tag_search = subseq_r2[x:y]
             # subseq_tag_search gets the AYYA sequence region
-
-            if subseq_tag_search == 'CCTT' or subseq_tag_search == 'TTCC': # these are abiguous
-                end_pos = -1
+            if subseq_tag_search == b"CCTT" or subseq_tag_search == b"TTCC": # these are abiguous
                 duplex_tag = b"NN"
             else:
                 duplex_tag = b"CC" if subseq_tag_search.find(b"CC") != -1 \
                              else b"TT" if subseq_tag_search.find(b"TT") != -1 \
                                   else b"NN"
-            return (end_pos, duplex_tag)
+            return (end_pos, duplex_tag, best_adapter.name)
         else:
-            return (-1, b"-1")
+            #print(best_score, best_adapter, r2_seq)
+            return (-1, b"-1", b"-1")
         
     # multimodal specific vars
     @property
@@ -273,6 +288,7 @@ class QiaSeqTrimmer(Trimmer):
                 duplex_info = self.duplex_tag
             else:
                 duplex_info = b":".join([self.tagname_duplex,b"Z",self.duplex_tag])
+
             read_id_info.append(duplex_info)
         
         if self.is_multimodal and self.include_common_seq_tag:
@@ -310,10 +326,9 @@ class QiaSeqTrimmer(Trimmer):
                 self._is_r2_polyT_5prime_trim = True
                 self.synthetic_oligo_len += self.r2_polyT_5prime_trim_len
         
-    def qiaseq_trim(self,primer_datastruct):
-        """ Trim QiaSeq DNA/RNA reads
-        """
-        # init some bools
+    def _reset_state(self):
+        '''
+        '''
         self._is_r1_primer_trimmed      = False
         self._is_r1_syn_trimmed         = False
         self._is_r2_primer_trimmed      = False
@@ -331,11 +346,18 @@ class QiaSeqTrimmer(Trimmer):
         self._is_r2_polyT_5prime_trim   = False # only used for multi-modal reads
 
         self._is_duplex_adapter_present     = False
+        self._duplex_tag                    = None
+        self._duplex_adapter_name           = None
+
         self._is_multimodal_adapter_present = False
         self._is_multimodal_alt_seq         = False
-        self._duplex_tag                    = None
         self._multimodal_adapter_name       = None
-        
+
+    def qiaseq_trim(self,primer_datastruct):
+        """ Trim QiaSeq DNA/RNA reads
+        """
+        self._reset_state()
+
         # init local variables
         primer_side_overlap = False
         syn_side_overlap    = False
@@ -357,7 +379,7 @@ class QiaSeqTrimmer(Trimmer):
 
         # identify duplex adapter and tag if needed
         if self.is_duplex:
-            adapter_end_pos,self._duplex_tag = self._id_duplex_tag(r2_seq)
+            adapter_end_pos,self._duplex_tag,self._duplex_adapter_name = self._id_duplex_tag(r2_seq)
             if adapter_end_pos == -1: # drop read
                 return
             # update synthetic oligo len
@@ -714,7 +736,6 @@ def wrapper_func(args,queue,buffer_):
                 continue
 
 
-
             if trim_obj.is_r1_qual_trim:
                 counters.num_r1_qual_trim_bases += trim_obj.r1_qual_trim_len
                 counters.num_r1_qual_trim += 1
@@ -744,6 +765,7 @@ def wrapper_func(args,queue,buffer_):
                 
             if args.is_duplex:
                 duplex_tag = trim_obj.duplex_tag
+                counters.duplex_adapter_count[trim_obj.duplex_adapter_name] += 1
                 if duplex_tag == b"CC":
                     counters.num_CC += 1
                 elif duplex_tag == b"TT":
@@ -800,6 +822,7 @@ def init_metrics():
     metrics.num_r2_primer_trimmed = 0
     metrics.num_r1_r2_overlap     = 0
     # duplex specific
+    metrics.duplex_adapter_count = collections.Counter()
     metrics.num_no_duplex = 0
     metrics.num_CC        = 0
     metrics.num_TT        = 0
@@ -846,10 +869,13 @@ def aggregator_and_writer(queue,f_out_r1,f2_out_r2,return_queue):
                 metrics.__dict__[metric] += val
 
             # write to disk
-            f_out_r1.write(trimmed_r1_lines)
-            f_out_r1.write(b"\n")
-            f2_out_r2.write(trimmed_r2_lines)
-            f2_out_r2.write(b"\n")
+            if trimmed_r1_lines == b"" or trimmed_r2_lines == b"":
+                assert trimmed_r2_lines == trimmed_r2_lines, "Error in writing fastqs"
+            else:
+                f_out_r1.write(trimmed_r1_lines)
+                f_out_r1.write(b"\n")
+                f2_out_r2.write(trimmed_r2_lines)
+                f2_out_r2.write(b"\n")
             logger.info("Processed : {n} reads".format(n=metrics.total_reads))
 
             
@@ -1056,6 +1082,9 @@ def main(args):
             [thousand_comma(metrics.num_CC) + "\tread fragments with duplex tag CC",
              thousand_comma(metrics.num_TT) + "\tread fragments with duplex tag TT",
              thousand_comma(metrics.num_NN) + "\tread fragments with duplex tag NN"])
+        #for a in metrics.duplex_adapter_count: # FOR DEBUG - REMOVE LATER
+            #out_metrics.append(thousand_comma(metrics.duplex_adapter_count[a]) + "\tread fragments with duplex adapter {}".format(a))
+
         out_metrics_dropped.append(thousand_comma(metrics.num_no_duplex) + "\tread fragments dropped, no duplex adapter")
         total_dropped += metrics.num_no_duplex
 

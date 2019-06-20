@@ -15,6 +15,7 @@ import helper
 # 2. Need example fastq files to simulate command line running
 # 3. Add some rna and duplex specific test cases
 
+
 class TestQiaSeqTrimDna(unittest.TestCase):
     '''
     '''
@@ -31,7 +32,7 @@ class TestQiaSeqTrimDna(unittest.TestCase):
         self.trimmer_obj = helper.helper_return_qiaseq_obj(self.args)
 
     def test_overlap_synthetic_side_check(self):
-        '''
+        ''' Check the default R1/R2 overlap using the Synthetic/UMI side sequence
         '''
         # edit dist = 0
         r1_seq = b"CCCAGGTCACCATCAAATACATCGGAGCCAGCCCCTTCGGAGGGTGCCAGTGGAGACCTGGGGGCCTCCTCTTCAGAGGGCTCCAGCCCTAGTGTCAGGTCCCCACCGCAGGACTCCAATTATCCCGCTTAT"
@@ -122,7 +123,7 @@ class TestQiaSeqTrimDna(unittest.TestCase):
 
 
     def test_overlap_primer_side_check(self):
-        '''
+        ''' Test whether the --primer-side-check flag enables the R1/R2 overlap rescue
         '''
         # edit dist = 0
         r1_seq = b"GCCTCTTGCTTCTCTTTTCCTATCCTGAGTAGTGGTAATCTACTGGGACGGAACAGCTTTGAGGTGCGTGTTTGTGCCTGTCCTGGGAGAGACCGGCGCACAGAGGAAGAGAATCTCCGCAAGAAAGGGGAGCCTCACCACGAGCTGCCC"
@@ -203,7 +204,57 @@ class TestQiaSeqTrimDna(unittest.TestCase):
             b"@M01750:502:000000000-AUK2G:1:1101:15325:1360 2:N:0:2",
             b"AAGTATAGGTGGATTGGAGTCCTCAGACAACTGTTCAAACTGATGGGACCCACTCCATCGAGATTTCACTGTAGCTAGACCAAAATCACCTATTTTTACTATGAGGTCTTCATGAAGAAATATATCTGAGGAGTAGTAAGTAAAGGAAAA",
             b"1>A1>D@FFB1>GGGGGGGGGGHHH1110BG1AA33DGGFEHH211EFGG?GG00B1F1AF//AEBGHGFF22D2AGHGGHGHC?F1110F1B122F/DFFFGEEGHHH1FHGHEBG1>BF1@BFEDF>F/1?BEFD2BFE2G2F1BBGE")
-        
+
+
+class TestQiaSeqTrimDuplex(unittest.TestCase):
+    '''
+    '''
+    def setUp(self):
+        '''
+        '''
+        # primer datastruct
+        self.primer_datastruct = PrimerDataStruct(k=8,primer_file=os.path.join(os.path.dirname(__file__),"test_data/test_primers_dna.txt"),
+                                                  ncpu=1,seqtype="dna",primer_col=3).primer_search_datastruct
+
+        # argparse obj
+        self.args = helper.helper_return_args()
+        self.args.is_duplex          = True
+        self.args.is_phased_adapters = True
+        # trimmer obj
+        self.trimmer_obj = helper.helper_return_qiaseq_obj(self.args)
+
+    def testDuplexAdapterOffset(self):
+        ''' Test whether the duplex adapters have the correct offsets stored
+        '''
+        for d in self.trimmer_obj._duplex_adapters:
+            start, end = d.offset_tag
+            self.assertEqual(d.seq[start:end], b"AYYA")
+
+    def testDuplexAdapterTrim(self):
+        ''' Test whether the duplex adapters are being correctly trimmed
+        '''
+        r2_seq = b"TACGAAATAGTACTGAGCGATTATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"TT", b"69-8-6")) # perfect match to an adapter
+
+        r2_seq = b"TACGAAATAGTACTGAGCGCCTTTAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"NN", b"69-8-6")) # imperfect match , ambigous duplex tag
+
+        r2_seq = b"TACGAAATAGTACTGACGCCCATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (19, b"CC", b"69-8-6")) # imperfect match - 1 deleted base in adapter
+
+        r2_seq = b"TACGAATAGTACTGAGCGCCCATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (19, b"CC", b"69-7-6")) # imperfect match - 1 deleted base in UMI , changes duplex adapter identfied
+
+        r2_seq = b"TACGAAATAGTACTGAGCGACTATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"NN", b"69-8-6")) # perfect match - ambigous duplex tag
+
+                              #GCGAYYATAGGA
+        r2_seq = b"TACGAAATAGTAGCGACCATAGGAGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (12, b"CC", b"69-4-6")) # perfect match - small adapter
+
+        r2_seq = b"TACGAAATAGTACGACCATAGGAGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (11, b"CC", b"69-4-6")) # 1-base deletion - small adapter
+
 if __name__ == '__main__':
-        unittest.main()
+    unittest.main()
         
