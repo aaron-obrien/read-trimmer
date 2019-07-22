@@ -233,27 +233,30 @@ class TestQiaSeqTrimDuplex(unittest.TestCase):
     def testDuplexAdapterTrim(self):
         ''' Test whether the duplex adapters are being correctly trimmed
         '''
-        r2_seq = b"TACGAAATAGTACTGAGCGATTATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"TT", b"69-8-6")) # perfect match to an adapter
+        r2_seq = b"TACGAAATAGTACTGAGCGATTATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (16, b"TT", b"69-8-6")) # perfect match to an adapter
 
-        r2_seq = b"TACGAAATAGTACTGAGCGCCTTTAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"NN", b"69-8-6")) # imperfect match , ambigous duplex tag
+        r2_seq = b"TACGAAATAGTACTGAGCGCCTTTAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (16, b"NN", b"69-8-6")) # imperfect match , ambigous duplex tag
 
-        r2_seq = b"TACGAAATAGTACTGACGCCCATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (19, b"CC", b"69-8-6")) # imperfect match - 1 deleted base in adapter
+        r2_seq = b"TACGAAATAGTACTGACGCCCATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (15, b"CC", b"69-8-6")) # imperfect match - 1 deleted base in adapter
 
-        r2_seq = b"TACGAATAGTACTGAGCGCCCATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (19, b"CC", b"69-7-6")) # imperfect match - 1 deleted base in UMI , changes duplex adapter identfied
+        r2_seq = b"TACGAATAGTACTGAGCGCCCATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (15, b"CC", b"69-7-6")) # imperfect match - 1 deleted base in UMI , changes duplex adapter identfied
 
-        r2_seq = b"TACGAAATAGTACTGAGCGACTATAGGAGTCCTGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (20, b"NN", b"69-8-6")) # perfect match - ambigous duplex tag
+        r2_seq = b"TACGAAATAGTACTGAGCGACTATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (16, b"NN", b"69-8-6")) # perfect match - ambigous duplex tag
 
                               #GCGAYYATAGGA
-        r2_seq = b"TACGAAATAGTAGCGACCATAGGAGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (12, b"CC", b"69-4-6")) # perfect match - small adapter
+        r2_seq = b"TACGAAATAGTAGCGACCATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (12, b"CC", b"69-4-6")) # perfect match - 69-4-6 adapter
 
-        r2_seq = b"TACGAAATAGTACGACCATAGGAGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
-        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (11, b"CC", b"69-4-6")) # 1-base deletion - small adapter
+        r2_seq = b"TACGAAATAGTACGACCATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (11, b"CC", b"69-3-6")) # perfect match - 69-3-6 adapter
+
+        r2_seq = b"TACGAAATAGTACGACCATAGGATGGCTGTCAATAATCCCCCGCCTCTGCTGGGCCCTGCGAATCACTCCCTGCCATTGATTACTGAGGAGTGTCAATTTCAGGTTGAATTCATCCCTAGTGAACAAAACGCAATACTGTA"
+        self.assertEqual(self.trimmer_obj._id_duplex_tag(r2_seq), (11, b"CC", b"69-3-6")) # 1-base deletion turns into 69-4-6 into 69-3-6 smaller adapter - which is fine.
 
 if __name__ == '__main__':
     unittest.main()
