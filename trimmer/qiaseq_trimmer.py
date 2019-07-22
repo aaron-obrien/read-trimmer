@@ -88,11 +88,12 @@ class QiaSeqTrimmer(Trimmer):
                 DuplexAdapter( b"CGTTCTGAGCGAYYATAGGAGTCCT", (11,15), b"00-12-11"),
                 DuplexAdapter(b"ACGTTCTGAGCGAYYATAGGAGTCCT", (12,16), b"00-13-11"),
 
-                DuplexAdapter(    b"GCGAYYATAGGAT",     (3,7),  b"69-4-6"),
-                DuplexAdapter(   b"AGCGAYYATAGGAT",     (4,8),  b"69-5-6"),
-                DuplexAdapter(  b"GAGCGAYYATAGGAT",     (5,9),  b"69-6-6"),
-                DuplexAdapter( b"TGAGCGAYYATAGGAGTCCT", (6,10), b"69-7-6"),
-                DuplexAdapter(b"CTGAGCGAYYATAGGAGTCCT", (7,11), b"69-8-6"))
+                DuplexAdapter(     b"CGAYYATAGGAT",  (2,6),  b"69-3-6"),
+                DuplexAdapter(    b"GCGAYYATAGGAT",  (3,7),  b"69-4-6"),
+                DuplexAdapter(   b"AGCGAYYATAGGAT",  (4,8),  b"69-5-6"),
+                DuplexAdapter(  b"GAGCGAYYATAGGAT",  (5,9),  b"69-6-6"),
+                DuplexAdapter( b"TGAGCGAYYATAGGAT",  (6,10), b"69-7-6"),
+                DuplexAdapter(b"CTGAGCGAYYATAGGAT",  (7,11), b"69-8-6"))
 
         else:
             self._duplex_adapters = (
