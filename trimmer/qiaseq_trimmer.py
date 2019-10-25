@@ -480,10 +480,12 @@ class QiaSeqTrimmer(Trimmer):
             return
         
         # set annotation for primer tag
-        temp = primer_datastruct[0][primer][0]
-        if self.seqtype == "dna":
-            chrom,pos,strand,seq = temp[1]
-            primer_info = chrom+"-"+strand+"-"+pos+"-"+str(len(seq))
+        if self.seqtype == "dna": # Consider Refactoring this to be more generic, maybe a flag --pr-info=[id/qiaseq/../..]
+            pr_info = []
+            for tmp in primer_datastruct[0][primer]:
+                chrom,pos,strand,seq = tmp[1]
+                pr_info.append("-".join((chrom, strand, pos, str(len(seq)))))
+            primer_info = ",".join(pr_info)
         elif self.seqtype == "rna":
             pr_id = []
             # could have 2 or more primers with same sequence
