@@ -634,10 +634,8 @@ def trim_custom_sequencing_adapter(args,buffers):
     r1_lines = buff_r1.split(b"\n")
     r2_lines = buff_r2.split(b"\n")
 
-    if len(r1_lines) == 0:
-        raise UserWarning("Empty R1 fastq")
-    elif len(r2_lines) == 0:
-        raise UserWarning("Empty R2 fastq")
+    if len(r1_lines) == 1 or len(r2_lines) == 1:
+        raise UserWarning("Input R1 or R2 fastq is empty.")
 
     num_reads = 0
     num_reads_have_adapter = 0
