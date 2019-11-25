@@ -254,7 +254,7 @@ class Trimmer(object):
         # Maybe add this logic in the trim_custom_sequencing_adapter function.
         best_adapter = {"seq":None, "align":None, "score":None}
         for a in self.custom_seq_adapter:
-            alignment = edlib.align(a, r1_seq[0:len(self.custom_seq_adapter)+3],
+            alignment = edlib.align(a, r1_seq[0:len(a)+3],
                                     mode="SHW",task="locations")
             score = float(alignment["editDistance"])/len(self.custom_seq_adapter)
             if best_adapter["seq"] is None or score < best_adapter["score"]:
