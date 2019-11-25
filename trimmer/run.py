@@ -46,7 +46,7 @@ def init_parser():
     parser.add_argument("--check-primer-side", action = "store_true",
                         help = "User primer side overlap coordinates for trimming R2 3' end")
     
-    parser.add_argument("--custom-seq-adapter", default = "AATGTACAGTATTGCGTTTTG",
+    parser.add_argument("--custom-seq-adapter", default = "AATGTACAGTATTGCGTTTTG, CCAGTACAGTATTGCGTTTTG",
                         help = "The custom sequencing adapter used in library preperation (SPE side). Default : %(default)s")
     
     parser.add_argument("--trim-custom-seq-adapter", action = "store_true",

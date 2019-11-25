@@ -174,6 +174,10 @@ class Trimmer(object):
             "polyT"        : re.compile(b"^([ACGTN]*?[CGAN])([T]{8,}[ACGNT]*$)"),
             "polyT_5prime" : re.compile(b"^([T]{5,})([ACGTN]*$)")
         }
+
+        # now possible to specify comma delimeted list of custom sequencing adapters
+        self.custom_seq_adapter = self.custom_seq_adapter.replace(b" ", b"").split(b",")
+
     # kmer size
     @property
     def k(self):
@@ -245,11 +249,18 @@ class Trimmer(object):
         :rtype int
         :returns end pos of adapter, -1 if not found
         '''
-        alignment = edlib.align(self.custom_seq_adapter,
-                                r1_seq[0:len(self.custom_seq_adapter)+3],
-                                mode="SHW",task="locations")
-        if float(alignment["editDistance"])/len(self.custom_seq_adapter) <= 0.18:
-            return alignment["locations"][-1][1]
+        best_adapter = {"seq":None, "align":None, "score":None}
+        for a in self.custom_seq_adapter:
+            alignment = edlib.align(a, r1_seq[0:len(self.custom_seq_adapter)+3],
+                                    mode="SHW",task="locations")
+            score = float(alignment["editDistance"])/len(self.custom_seq_adapter)
+            if best_adapter["seq"] is None or score < best_adapter["score"]:
+                best_adapter["seq"]   = a
+                best_adapter["align"] = alignment
+                best_adapter["score"] = score
+
+        if best_adapter["score"] < 0.18:
+            return best_adapter["align"]["locations"][-1][1]
         else:
             return -1
 
