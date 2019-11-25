@@ -650,7 +650,7 @@ def trim_custom_sequencing_adapter(args,buffers):
             if trim_obj.custom_sequencing_adapter_check(r1_seq) != -1:
                 num_reads_have_adapter += 1                
         i+=1
-    return (num_reads,float(num_reads_have_adapter)/num_reads > 0.95)
+    return (num_reads,float(num_reads_have_adapter)/num_reads > 0.80)
     
 def wrapper_func(args,queue,buffer_):
     ''' This is the function called in parallel.
