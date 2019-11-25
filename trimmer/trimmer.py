@@ -249,6 +249,9 @@ class Trimmer(object):
         :rtype int
         :returns end pos of adapter, -1 if not found
         '''
+        # NOTE: Will check multiple adapters for all reads
+        # Should the adapter be identified first and only that sequence used going forward ?
+        # Maybe add this logic in the trim_custom_sequencing_adapter function.
         best_adapter = {"seq":None, "align":None, "score":None}
         for a in self.custom_seq_adapter:
             alignment = edlib.align(a, r1_seq[0:len(self.custom_seq_adapter)+3],
