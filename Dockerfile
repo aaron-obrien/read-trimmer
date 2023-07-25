@@ -6,7 +6,7 @@ FROM python:stretch
 # trimming tool. That is to ensure the latest code
 # is being used.
 
-ARG repository=qiaseq
+ARG repository=aaron-obrien
 ARG branch=master
 
 # Installation of requirements
@@ -21,10 +21,10 @@ echo "# [$(date)] Running code updates ..."\n\
 cd /read-trimmer\n\
 git pull origin ${branch}\n\
 echo "# [$(date)] Code updated."\n\
+python3 /read-trimmer/trimmer/setup.py\n\
 python3 /read-trimmer/trimmer/run.py "$@"' > /trim
 
 RUN chmod +x /trim
 
 ENTRYPOINT [ "/trim" ]
 CMD [ "--help" ]
-
